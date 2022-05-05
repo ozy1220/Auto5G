@@ -2,20 +2,32 @@
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
 #include <string.h>
+//RFID
+#include <SPI.h>
+#include <MFRC522.h>
+#include <cstdlib>
+#include <cstdint>
+#include <cstring>
+#include <cctype>
 
-#define EnA 13 //10
-#define EnB 16 //5
-#define In1 12 //9
-#define In2 14 //8
-#define In3 4 //7
-#define In4 5 //6
+#define EnA D9 //10
+#define EnB D15 //5
+#define In1 D10 //9
+#define In2 1 //8
+#define In3 D0 //7
+#define In4 D14 //6
+
+//RFID
+#define RST_PIN D2
+#define SS_PIN D8
+MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 const char* WIFI_SSID = "EcoCharlyBravo";
 const char* WIFI_PASSWORD = "6322167445Eco87";
 
 String lastpos;
 
-WiFiClient wf;
+  WiFiClient wf;
   
 
 void norte() {
@@ -82,8 +94,6 @@ bool connectWifi()
   Serial.println("WiFi connected");
   Serial.println(WiFi.localIP());
 
-  wf.connect("10.70.1.19", 8080);
-
   return true;
 }
 
@@ -104,41 +114,59 @@ char obtenDeWeb() {
 
   http.end();  //Close connection 
 
-  // Regresa el primer caracter luego de las comillas
+  // Regresa el primer caracter luego de las comillas 
   return payload[1];
 
 }
 
 void setup() {
-
-  pinMode(EnA, OUTPUT);
-  pinMode(EnB, OUTPUT);
-  pinMode(In1, OUTPUT);
-  pinMode(In2, OUTPUT);
-  pinMode(In3, OUTPUT);
-  pinMode(In4, OUTPUT);
   
   Serial.begin(115200);
   Serial.println();
 
   lastpos = "limbo";
 
+  SPI.begin();
+  mfrc522.PCD_Init();
+  delay(400);
+
   Serial.print("Connecting to ");
   Serial.println(WIFI_SSID);
   if (connectWifi()) Serial.println("Estoy conectado");
   else Serial.println("Se intento y no se logro :'(");
+  
+  pinMode(EnA, OUTPUT);
+  pinMode(EnB, OUTPUT);
+  pinMode(In1, OUTPUT);
+  pinMode(In2, OUTPUT);
+  pinMode(In3, OUTPUT);
+  pinMode(In4, OUTPUT);
 }
 
 void loop() {
 
+
+    //RFID
+    if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial())  {
+      lastpos = "";
+      for (byte i = 0; i < mfrc522.uid.size; i++) {
+        if (!mfrc522.uid.uidByte[i])
+          lastpos += '.';
+        else
+          lastpos += String(mfrc522.uid.uidByte[i], HEX);
+          
+      } 
+    }
+
     char c;
     c = obtenDeWeb();
     Serial.println(c);
+    
 
     if (c == 'N') norte();
     else if (c == 'S') sur();
     else if (c == 'E') este();
     else if (c == 'O') oeste();
     else para();
-  delay(50);
+    delay(50);
 }
