@@ -11,6 +11,7 @@
 #define In4 D3 
 
 const char* WIFI_SSID = "EcoCharlyBravo";
+const char* DIR_IP = "10.70.1.19";
 const char* WIFI_PASSWORD = "6322167445Eco87";
 
 String IdCarro;
@@ -82,7 +83,7 @@ bool connectWifi()
   Serial.println("WiFi connected");
   Serial.println(WiFi.localIP());
 
-  wf.connect("10.70.1.19", 8080);
+  wf.connect(DIR_IP, 8080);
 
   return true;
 }
@@ -93,8 +94,8 @@ char obtenDeWeb() {
   String link = "/querycarro/" + IdCarro;
   Serial.println(link);
 
-  wf.connect("10.70.1.19", 8080);
-  http.begin(wf, "10.70.1.19", 8080, link);     //Specify request destination
+  wf.connect(DIR_IP, 8080);
+  http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
   
   int code = http.GET();
   Serial.println(code);
