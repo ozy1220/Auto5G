@@ -3,17 +3,17 @@
 #include <WiFiClient.h>
 #include <string.h>
 
-#define EnA 13 //10
-#define EnB 16 //5
-#define In1 12 //9
-#define In2 14 //8
-#define In3 4 //7
-#define In4 5 //6
+#define EnA D7 
+#define EnB D2 
+#define In1 D6 
+#define In2 D5 
+#define In3 D4 
+#define In4 D3 
 
 const char* WIFI_SSID = "EcoCharlyBravo";
 const char* WIFI_PASSWORD = "6322167445Eco87";
 
-String lastpos;
+String IdCarro;
 
 WiFiClient wf;
   
@@ -34,7 +34,7 @@ void sur() {
   analogWrite(EnA, 150);
   analogWrite(EnB, 150);
 }
-void este() {
+void oeste() {
   digitalWrite(In1, HIGH);
   digitalWrite(In2, LOW);
   digitalWrite(In3, LOW);
@@ -42,7 +42,7 @@ void este() {
   analogWrite(EnA, 150);
   analogWrite(EnB, 150);
 }
-void oeste() {
+void este() {
   digitalWrite(In1, LOW);
   digitalWrite(In2, HIGH);
   digitalWrite(In3, HIGH);
@@ -90,7 +90,7 @@ bool connectWifi()
 char obtenDeWeb() {
   HTTPClient http;    //Declare object of class HTTPClient
 
-  String link = "/querycarro/" + lastpos;
+  String link = "/querycarro/" + IdCarro;
   Serial.println(link);
 
   wf.connect("10.70.1.19", 8080);
@@ -121,7 +121,8 @@ void setup() {
   Serial.begin(115200);
   Serial.println();
 
-  lastpos = "limbo";
+  //Definimos que carro es
+  IdCarro = "Azul";
 
   Serial.print("Connecting to ");
   Serial.println(WIFI_SSID);
