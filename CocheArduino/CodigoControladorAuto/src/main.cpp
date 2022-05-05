@@ -16,7 +16,7 @@ const char* WIFI_PASSWORD = "6322167445Eco87";
 
 String IdCarro;
 
-WiFiClient wf;
+  WiFiClient wf;
   
 
 void norte() {
@@ -105,19 +105,12 @@ char obtenDeWeb() {
 
   http.end();  //Close connection 
 
-  // Regresa el primer caracter luego de las comillas
+  // Regresa el primer caracter luego de las comillas 
   return payload[1];
 
 }
 
 void setup() {
-
-  pinMode(EnA, OUTPUT);
-  pinMode(EnB, OUTPUT);
-  pinMode(In1, OUTPUT);
-  pinMode(In2, OUTPUT);
-  pinMode(In3, OUTPUT);
-  pinMode(In4, OUTPUT);
   
   Serial.begin(115200);
   Serial.println();
@@ -129,6 +122,13 @@ void setup() {
   Serial.println(WIFI_SSID);
   if (connectWifi()) Serial.println("Estoy conectado");
   else Serial.println("Se intento y no se logro :'(");
+  
+  pinMode(EnA, OUTPUT);
+  pinMode(EnB, OUTPUT);
+  pinMode(In1, OUTPUT);
+  pinMode(In2, OUTPUT);
+  pinMode(In3, OUTPUT);
+  pinMode(In4, OUTPUT);
 }
 
 void loop() {
@@ -142,5 +142,5 @@ void loop() {
     else if (c == 'E') este();
     else if (c == 'O') oeste();
     else para();
-  delay(50);
+    delay(50);
 }
