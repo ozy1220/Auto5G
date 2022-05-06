@@ -74,20 +74,17 @@ void loop()
   if ( ! mfrc522.PICC_ReadCardSerial()) return;
   Serial.print("\n");
   Serial.println("**Card Detected**");
-    
-  while (blockData <= fin) {
-    Serial.print("\n");
-    Serial.print("Writing ");
-    Serial.print(blockData);
-    Serial.println(" to Data Block...");
-    if (WriteDataToBlock(blockNum, blockData)) {
-      blockData++;
-      delay(1500);
-      Serial.println("Listo para escribir");
-    }
-    return;
-  }
    
-  Serial.print("TERMINE");
-  delay(10000);
+  Serial.print("\n");
+  Serial.println("Reading from Data Block...");
+  if (ReadDataFromBlock(blockNum, readBlockData)) {
+   Serial.print("\n");
+   Serial.print("Data in Block:");
+   Serial.print(blockNum);
+   Serial.print(" --> ");
+    
+    Serial.print(*((unsigned int*) readBlockData));
+
+    Serial.print("\n");
+  }
 }
