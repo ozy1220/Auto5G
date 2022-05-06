@@ -6,14 +6,14 @@
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
-int ini = 1;
-int fin = 10;
+unsigned int ini = 1;
+unsigned int fin = 10;
 
-int blockNum = ini;  
+int blockNum = 5;  
 
 /* Create an array of 16 Bytes and fill it with data */
 /* This is the actual data which is going to be written into the card */
-unsigned int blockData = 1;
+unsigned int blockData = ini;
 
 /* Create another array to read data from Block */
 /* Legthn of buffer should be 2 Bytes more than the size of Block (16 Bytes) */
@@ -86,5 +86,7 @@ void loop()
     Serial.print(*((unsigned int*) readBlockData));
 
     Serial.print("\n");
+    delay(1500);
+    Serial.println("Listo para leer");
   }
 }
