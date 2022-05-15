@@ -6,8 +6,8 @@
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
-unsigned int ini = 1;
-unsigned int fin = 10;
+unsigned int ini = 396;
+unsigned int fin = 600;
 
 int blockNum = 5;  
 

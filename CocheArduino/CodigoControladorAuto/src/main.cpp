@@ -2,6 +2,7 @@
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
 #include <string.h>
+#include <SPI.h>
 
 #define EnA D7 
 #define EnB D2 
@@ -14,10 +15,10 @@ const char* WIFI_SSID = "EcoCharlyBravo";
 const char* DIR_IP = "10.70.1.19";
 const char* WIFI_PASSWORD = "6322167445Eco87";
 
-String IdCarro;
-
   WiFiClient wf;
   
+//color de carro
+String color = "Azul";
 
 void norte() {
   digitalWrite(In1, HIGH);
@@ -91,7 +92,7 @@ bool connectWifi()
 char obtenDeWeb() {
   HTTPClient http;    //Declare object of class HTTPClient
 
-  String link = "/querycarro/" + IdCarro;
+  String link = "/avanzaMotores/" + color;
   Serial.println(link);
 
   wf.connect(DIR_IP, 8080);
@@ -114,9 +115,6 @@ void setup() {
   
   Serial.begin(115200);
   Serial.println();
-
-  //Definimos que carro es
-  IdCarro = "Azul";
 
   Serial.print("Connecting to ");
   Serial.println(WIFI_SSID);
@@ -142,5 +140,5 @@ void loop() {
     else if (c == 'E') este();
     else if (c == 'O') oeste();
     else para();
-    delay(50);
+    //delay(50);
 }
