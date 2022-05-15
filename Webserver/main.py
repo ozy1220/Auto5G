@@ -1,6 +1,8 @@
 from cgitb import reset
 from fastapi import FastAPI, Response
 import uvicorn
+import asyncio
+import datetime
 
 app = FastAPI()
 #del 0-2 van a ser los sensores de el frente
@@ -9,27 +11,22 @@ carros = {
     'Azul':{
         'frente': -1,
         'atras': -1,
-        'dire': 'V'
+        'dire': 'V',
+        'queue': asyncio.Queue()
     },
     'Verde':{
         'frente': -1,
         'atras': -1,
-        'dire': 'V'
+        'dire': 'V',
+        'queue': asyncio.Queue()
     },
     'Rojo':{
         'frente': -1,
         'atras': -1,
-        'dire': 'V'
+        'dire': 'V',
+        'queue': asyncio.Queue()
     }
 }
-
-#definepruebas
-prueba = "N"
-
-def cambia():
-    global prueba
-    if prueba == 'N': prueba = 'S'
-    elif prueba == 'S': prueba = 'N'
 
 @app.get("/")
 async def root():
@@ -37,19 +34,30 @@ async def root():
 
 @app.get("/avanzaMotores/{carro}")
 async def _avanza(carro):
-    #res = carros[carro]['dire']
-    global prueba
-    res = prueba
-    print(res)
-    return str(res)
+    print(datetime.datetime.now())
+    try:
+        res = await asyncio.wait_for(carros[carro]['queue'].get(), timeout = 5.0)
+        carros[carro]['queue'].task_done()
+        carros[carro]['dire'] = res
+        print(res)
+        return str(res)
+    except asyncio.TimeoutError:
+        carros[carro]['dire'] = 'N'
+        print(carros[carro]['dire'])
+        return str('N')
 
 @app.get("/posicion/{carro}/{front}/{back}")
 async def _posicion(carro,front,back):
     
+    print(datetime.datetime.now())
+
     global carros
     carros[carro]['frente'] = front
     carros[carro]['atras'] = back
-    cambia()
+
+    if carros[carro]['dire'] == 'N': carros[carro]['queue'].put_nowait('S')
+    else: carros[carro]['queue'].put_nowait('N') 
+    
     return "acabe"
 
 
