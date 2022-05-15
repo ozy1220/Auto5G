@@ -1,5 +1,6 @@
 #include <SPI.h>
 #include <MFRC522.h>
+#include <string.h>
 
 //WIFI
 #include <ESP8266Wifi.h>
@@ -22,11 +23,15 @@ const char* WIFI_PASSWORD = "6322167445Eco87";
 WiFiClient wf;
 
 //lector de rfid
-unsigned int pos;
+unsigned int posb,posf,trash;
 int blockNum = 5;
 byte bufferLen = 18;
 byte readBlockData[18];
-MFRC522::StatusCode status;  
+MFRC522::StatusCode status;
+
+//color de carro
+String color = "Azul";   
+bool llama;
 
 bool ReadBack(int blockNum, byte readBlockData[]) 
 {
@@ -61,6 +66,19 @@ bool ReadFront(int blockNum, byte readBlockData[])
     return true;
   }
   
+}
+
+void postEnWeb() {
+  HTTPClient http;    //Declare object of class HTTPClient
+
+  String link = "/posicion/" + color + '/' + posf + '/' + posb ;
+  Serial.println(link);
+
+  wf.connect("10.70.1.19", 8080);
+  http.begin(wf, "10.70.1.19", 8080, link);     //Specify request destination
+  
+  int code = http.GET();
+  http.end();
 }
 
 bool connectWifi()
@@ -105,6 +123,7 @@ void setup() {
 }
 
 void loop() {
+  llama = false;
 
   //BACK
   if ( Back.PICC_IsNewCardPresent()) {  
@@ -112,30 +131,30 @@ void loop() {
       if ( Back.PICC_ReadCardSerial()) {   
 
         if (ReadBack(blockNum, readBlockData)) {
-          pos = *((unsigned int*) readBlockData);
-          //hacer la query
-          
+          trash = *((unsigned int*) readBlockData);     
+          if (trash != posb) {
+            posb = trash;     
+            llama = true;
+          } 
         }
-
-                      
+                     
       }      
 	}	
 
 	// Revisamos si hay nuevas tarjetas  presentes
-	if (Front.PICC_IsNewCardPresent()) 
-        {  
-  		//Seleccionamos una tarjeta
-            if ( Front.PICC_ReadCardSerial()) 
-            {
-                  // Enviamos serialemente su UID
-                  Serial.print("FRONT     Card UID:");
-                  for (byte i = 0; i < Front.uid.size; i++) {
-                          Serial.print(Front.uid.uidByte[i] < 0x10 ? " 0" : " ");
-                          Serial.print(Front.uid.uidByte[i], HEX);   
-                  } 
-                  Serial.println();
-                  // Terminamos la lectura de la tarjeta  actual
-                  Front.PICC_HaltA();         
-            }      
+	if (Front.PICC_IsNewCardPresent()) {  
+  	//Seleccionamos una tarjeta
+         if ( Front.PICC_ReadCardSerial()) {  
+               if (ReadFront(blockNum, readBlockData)) {
+                trash = *((unsigned int*) readBlockData);          
+                if (trash != posf) {
+                  posf = trash;     
+                  llama = true;
+                }  
+              }     
+         }      
 	}	
+
+
+  if (llama) postEnWeb();
 }

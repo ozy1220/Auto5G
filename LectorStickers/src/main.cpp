@@ -63,7 +63,7 @@ void setup()
   Serial.begin(115200);
   SPI.begin();
   mfrc522.PCD_Init();
-  Serial.println("Scan a MIFARE Ultralight C Tag to write data...");
+  Serial.println("Scan a MIFARE Ultralight C Tag, please");
 }
 
 void loop()
