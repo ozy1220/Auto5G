@@ -1,9 +1,12 @@
 from cgitb import reset
+from distutils.filelist import translate_pattern
 from fastapi import FastAPI, Response
 from fastapi.responses import HTMLResponse
 import uvicorn
 import asyncio
 import datetime
+import uuid
+from starlette.responses import RedirectResponse
 
 app = FastAPI()
 #del 0-2 van a ser los sensores de el frente
@@ -13,56 +16,92 @@ carros = {
         'frente': -1,
         'atras': -1,
         'dire': 'V',
+        'ocupado': 'false',
+        'llave' : '123456',
         'queue': asyncio.Queue()
     },
     'Verde':{
         'frente': -1,
         'atras': -1,
         'dire': 'V',
+        'ocupado': 'false',
+        'llave' : '123456',
         'queue': asyncio.Queue()
     },
     'Rojo':{
         'frente': -1,
         'atras': -1,
         'dire': 'V',
+        'ocupado': 'false',
+        'llave' : '123456',
         'queue': asyncio.Queue()
     }
 }
 
-@app.get("/")
+
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    return {"message": "Hello World!"}
+
+    if carros['Rojo']['ocupado'] == 'true': linkRojo = '#'
+    else: linkRojo = '/control/Rojo'
+    if carros['Azul']['ocupado'] == 'true': linkAzul = '#'
+    else: linkAzul = '/control/Azul'
+    if carros['Verde']['ocupado'] == 'true': linkVerde = '#'
+    else: linkVerde = '/control/Verde'
+
+    f = open("./archivosHTML/inicio.html", "r")
+    html = f.read()
+    html = html.format(ocupadoRojo = carros['Rojo']['ocupado'], 
+                       ocupadoAzul = carros['Azul']['ocupado'],
+                       ocupadoVerde = carros['Verde']['ocupado'],
+                       linkRojo = linkRojo,
+                       linkAzul = linkAzul,
+                       linkVerde = linkVerde)
+    return HTMLResponse(content=html, status_code=200)
+
 
 @app.get("/avanzaMotores/{carro}")
 async def _avanza(carro):
-    print(datetime.datetime.now())
     try:
         res = await asyncio.wait_for(carros[carro]['queue'].get(), timeout = 50.0)
         carros[carro]['queue'].task_done()
         carros[carro]['dire'] = res
-        print(res)
         return str(res)
     except asyncio.TimeoutError:
         carros[carro]['dire'] = 'V'
-        print(carros[carro]['dire'])
         return str('V')
 
 
-@app.get("/control/", response_class=HTMLResponse)
-async def _carrito():
+@app.get("/control/{carro}", response_class=HTMLResponse)
+async def _carrito(carro):
+    x = str(uuid.uuid4())
+    carros[carro]['llave'] = x
+    carros[carro]['ocupado'] = 'true'
+    print(x)
+
     f = open("./archivosHTML/control.html", "r")
     html = f.read()
-    print(html)
+    html = html.format(carro = carro,
+                       hash = x)
     return HTMLResponse(content = html, status_code=200)
 
 
-@app.get("/direccion/{param_dir}/{carro}")
-async def direccion(response: Response, param_dir, carro):
+@app.get("/desconecta/{carro}")
+async def _desconecta(carro, status_code = 200):
+    carros[carro]['ocupado'] = 'false'
+    carros[carro]['llave'] = str(uuid.uuid4())
+    return RedirectResponse(url="/",status_code=302)
+
+
+@app.get("/direccion/{param_dir}/{carro}/{hash}")
+async def direccion(response: Response, param_dir, carro, hash):
     response.headers["access-control-allow-origin"] = "*"
 
-    global carros
+    if (hash != carros[carro]['llave']): return "Error(no eres quien lo controla)"
+
     carros[carro]['queue'].put_nowait(param_dir)
     return 'OK'
+
 
 @app.get("/posicion/{carro}/{front}/{back}")
 async def _posicion(carro,front,back):
@@ -73,11 +112,9 @@ async def _posicion(carro,front,back):
     carros[carro]['frente'] = front
     carros[carro]['atras'] = back
 
-    if carros[carro]['dire'] == 'N': carros[carro]['queue'].put_nowait('S')
-    else: carros[carro]['queue'].put_nowait('N') 
+    carros[carro]['dire'] = 'S'
     
     return "acabe"
-
 
 
 if __name__ == '__main__':

@@ -18,7 +18,7 @@ const char* WIFI_PASSWORD = "6322167445Eco87";
   WiFiClient wf;
   
 //color de carro
-String color = "Azul";
+String color = "Verde";
 
 void norte() {
   digitalWrite(In1, HIGH);
