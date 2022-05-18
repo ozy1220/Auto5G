@@ -1,0 +1,5 @@
+Cosas que instale para el SSE
+
+ - pip install sse-starlette
+ - pip install asyncio
+ - pip install aiofiles

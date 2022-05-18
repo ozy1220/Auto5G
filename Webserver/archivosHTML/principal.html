@@ -1,0 +1,161 @@
+<html>
+<style>
+
+.Rojo {
+  position: relative;
+  /*cambiar el color*/
+  background: #FF0000;
+  display: block;
+  height: 100px;
+  width: 100%;
+}
+
+.Verde {
+  position: relative;
+  /*cambiar el color*/
+  background: #00AA00;
+  display: block;
+  height: 100px;
+  width: 100%;
+}
+
+.Azul {
+  position: relative;
+  /*cambiar el color*/
+  background: #0000FF;
+  display: block;
+  height: 100px;
+  width: 100%;
+}
+
+.texto{
+  transition: color 300ms ease-out;
+  line-height: 60px;
+  text-align: center;
+  position: relative;
+  font-weight: 700;
+  font-size: 42px;
+  display: block;
+  opacity: 0.9;
+  color: rgba(255, 255, 255, 0.827);
+}
+
+.xbutton {
+  padding: 10px 30px;
+  box-shadow: 0px 0px 12px -2px rgba(0,0,0,0.5);
+  line-height: 1.2;
+  background: #b036c6;
+  text-decoration: none;
+  color: white;
+  font-size: 14px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  position: relative;
+  transition: background-color .6s ease;
+  overflow: hidden;
+  text-align: left;
+}
+
+
+</style>
+<body>
+    <script src="https://unpkg.com/vue@3"></script>
+
+    <div id="app">
+        <div id="info-carros" width="100%">
+            <table width="100%"><tr>
+                <td width="33%">
+                    <div id="carroRojo" class="Rojo texto">
+                        <button class="xbutton" v-on:click="desconectaRojo">Desconectar</button>
+                        <div>
+                            <span v-html="fRojo"></span>
+                            <span>, </span>
+                            <span v-html="bRojo"></span>
+                        </div>
+                    </div>
+                </td>
+                <td width="33%">
+                    <div id="carroVerde" class="Verde texto">
+                        <button class="xbutton" v-on:click="desconectaVerde">Desconectar</button>
+                        <div>
+                            <span v-html="fVerde"></span>
+                            <span>, </span>
+                            <span v-html="bVerde"></span>
+                        </div>
+                    </div>
+                </td>
+                <td width="33%">
+                    <div id="carroAzul" class="Azul texto">
+                        <button class="xbutton" v-on:click="desconectaAzul">Desconectar</button>
+                        <div>
+                            <span v-html="fAzul"></span>
+                            <span>, </span>
+                            <span v-html="bAzul"></span>
+                        </div>
+                    </div>
+                </td>
+            </tr></table>
+        </div>
+        <div id="mapa">
+
+        </div>        
+    </div>
+
+    <script>
+        const {createApp} = Vue
+
+        createApp({
+            data() {
+                return {
+                    colorCarro: 'Rojo',
+                    fRojo: 0,
+                    fVerde: 0,
+                    fAzul: 0,
+                    bRojo: 0,
+                    bVerde: 0,
+                    bAzul: 0
+                }
+            },
+            created() {
+                this.setupStream();
+            },
+            methods: {
+                desconectaRojo(){ fetch("/desconecta/Rojo"); },
+                desconectaVerde(){ fetch("/desconecta/Verde"); },
+                desconectaAzul(){ fetch("/desconecta/Azul"); },
+                
+                setupStream() {
+                    
+                    let es = new EventSource('/stream');
+                    console.log('Setting up events');
+
+                    es.addEventListener('message', event => {
+                        console.log(event.data);
+                        let data = JSON.parse(event.data);
+                        if (data.color == 'Rojo'){
+                            this.fRojo = data.front;
+                            this.bRojo = data.back;
+                        }
+                        else if (data.color == 'Verde'){
+                            this.fVerde = data.front;
+                            this.bVerde = data.back;
+                        }
+                        else if (data.color == 'Azul'){
+                            this.fAzul = data.front;
+                            this.bAzul = data.back;
+                        }
+                    }, false);
+
+                    es.addEventListener('error', event => {
+                        if (event.readyState == EventSource.CLOSED) {
+                            console.log('Event was closed');
+                            console.log(EventSource);
+                        }
+                    }, false);
+                }
+            }
+        }).mount('#app')
+
+    </script>
+</body>
+</html>

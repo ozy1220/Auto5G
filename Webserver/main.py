@@ -1,12 +1,19 @@
 from cgitb import reset
 from distutils.filelist import translate_pattern
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Request
 from fastapi.responses import HTMLResponse
+from fastapi.encoders import jsonable_encoder
 import uvicorn
 import asyncio
+import aiofiles
 import datetime
 import uuid
+import random
 from starlette.responses import RedirectResponse
+
+# -------- Inicia codigo para SSE
+from sse_starlette.sse import EventSourceResponse
+# -------- Fin codigo para SSE
 
 app = FastAPI()
 #del 0-2 van a ser los sensores de el frente
@@ -37,6 +44,44 @@ carros = {
         'queue': asyncio.Queue()
     }
 }
+qPosiciones = asyncio.Queue()
+
+# ---------- Inicio codigo para SSE
+STREAM_DELAY = 1  # second
+RETRY_TIMEOUT = 15000  # milisecond
+
+@app.get('/stream')
+async def message_stream(request: Request):
+    async def event_generator():
+        while True:
+            # If client closes connection, stop sending events
+            if await request.is_disconnected():
+                break
+
+            # Checks for new messages and return them to client if any
+            try:
+                qobj = await asyncio.wait_for(qPosiciones.get(), 5)
+            except:
+                qobj = {
+                    'color': 'Rojo',
+                    'front': 1,
+                    'back': 100
+                }
+            color = qobj['color']
+            front = qobj['front']
+            back = qobj['back']
+                
+            yield {
+                    'event': 'message',
+                    'id': 'message_id',
+                    'retry': RETRY_TIMEOUT,
+                    'data':'{"color": "' + color + '", "front": ' + str(front) + ', "back": ' + str(back) + '}'
+            }
+
+            #await asyncio.sleep(STREAM_DELAY)
+
+    return EventSourceResponse(event_generator())
+# ---------- Fin codigo para SSE
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -49,14 +94,24 @@ async def root():
     if carros['Verde']['ocupado'] == 'true': linkVerde = '#'
     else: linkVerde = '/control/Verde'
 
-    f = open("./archivosHTML/inicio.html", "r")
-    html = f.read()
+    async with aiofiles.open("./archivosHTML/inicio.html", mode="r") as f:
+        html = await f.read()
+
     html = html.format(ocupadoRojo = carros['Rojo']['ocupado'], 
                        ocupadoAzul = carros['Azul']['ocupado'],
                        ocupadoVerde = carros['Verde']['ocupado'],
                        linkRojo = linkRojo,
                        linkAzul = linkAzul,
                        linkVerde = linkVerde)
+    return HTMLResponse(content=html, status_code=200)
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def pagAdmin():
+    async with aiofiles.open('./archivosHTML/principal.html', mode='r') as f:
+    # f = open("./archivosHTML/principal.html", "r")
+        html = await f.read()
+
     return HTMLResponse(content=html, status_code=200)
 
 
@@ -79,8 +134,8 @@ async def _carrito(carro):
     carros[carro]['ocupado'] = 'true'
     print(x)
 
-    f = open("./archivosHTML/control.html", "r")
-    html = f.read()
+    async with aiofiles.open("./archivosHTML/control.html", mode="r") as f:
+        html = await f.read()
     html = html.format(carro = carro,
                        hash = x)
     return HTMLResponse(content = html, status_code=200)
@@ -105,14 +160,15 @@ async def direccion(response: Response, param_dir, carro, hash):
 
 @app.get("/posicion/{carro}/{front}/{back}")
 async def _posicion(carro,front,back):
-    
-    print(datetime.datetime.now())
 
-    global carros
     carros[carro]['frente'] = front
     carros[carro]['atras'] = back
-
-    carros[carro]['dire'] = 'S'
+    qobj = {
+        'carro': carro,
+        'front': front,
+        'back': back
+    }
+    qPosiciones.put_nowait(qobj)
     
     return "acabe"
 
