@@ -56,6 +56,22 @@
   text-align: left;
 }
 
+.ubutton {
+  padding: 10px 30px;
+  box-shadow: 0px 0px 12px -2px rgba(0,0,0,0.5);
+  line-height: 1.2;
+  background: #686768 !important;
+  text-decoration: none;
+  color: white;
+  font-size: 14px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  position: relative;
+  transition: background-color .6s ease;
+  overflow: hidden;
+  text-align: left;
+}
+
 
 </style>
 <body>
@@ -66,7 +82,9 @@
             <table width="100%"><tr>
                 <td width="33%">
                     <div id="carroRojo" class="Rojo texto">
-                        <button class="xbutton" v-on:click="desconectaRojo">Desconectar</button>
+                        <button class="xbutton" v-bind:class="{ubutton: !rconectado}" v-on:click="desconectaRojo">
+                            Desconectar
+                        </button>
                         <div>
                             <span v-html="fRojo"></span>
                             <span>, </span>
@@ -76,7 +94,7 @@
                 </td>
                 <td width="33%">
                     <div id="carroVerde" class="Verde texto">
-                        <button class="xbutton" v-on:click="desconectaVerde">Desconectar</button>
+                        <button class="xbutton" v-bind:class="{ubutton: !vconectado}" v-on:click="desconectaVerde">Desconectar</button>
                         <div>
                             <span v-html="fVerde"></span>
                             <span>, </span>
@@ -86,7 +104,7 @@
                 </td>
                 <td width="33%">
                     <div id="carroAzul" class="Azul texto">
-                        <button class="xbutton" v-on:click="desconectaAzul">Desconectar</button>
+                        <button class="xbutton" v-bind:class="{ubutton: !aconectado}" v-on:click="desconectaAzul">Desconectar</button>
                         <div>
                             <span v-html="fAzul"></span>
                             <span>, </span>
@@ -113,16 +131,20 @@
                     fAzul: 0,
                     bRojo: 0,
                     bVerde: 0,
-                    bAzul: 0
+                    bAzul: 0,
+
+                    rconectado: false,
+                    vconectado: false,
+                    aconectado: false
                 }
             },
             created() {
                 this.setupStream();
             },
             methods: {
-                desconectaRojo(){ fetch("/desconecta/Rojo"); },
-                desconectaVerde(){ fetch("/desconecta/Verde"); },
-                desconectaAzul(){ fetch("/desconecta/Azul"); },
+                desconectaRojo(){ if (rconectado) fetch("/desconecta/Rojo"); },
+                desconectaVerde(){ if (vconectado) fetch("/desconecta/Verde"); },
+                desconectaAzul(){ if (aconectado) fetch("/desconecta/Azul"); },
                 
                 setupStream() {
                     
@@ -130,7 +152,6 @@
                     console.log('Setting up events');
 
                     es.addEventListener('message', event => {
-                        console.log(event.data);
                         let data = JSON.parse(event.data);
                         if (data.color == 'Rojo'){
                             this.fRojo = data.front;
@@ -144,6 +165,17 @@
                             this.fAzul = data.front;
                             this.bAzul = data.back;
                         }
+                    }, false);
+
+                    es.addEventListener('connect', event => {
+                        console.log('connect');
+                        console.log(event.data);
+                        let data = JSON.parse(event.data);
+                        console.log(data.color);
+                        console.log(data.status);
+                        if (data.color == 'Rojo'){ this.rconectado = data.status; }
+                        else if (data.color == 'Verde'){ this.vconectado = data.status; }
+                        else if (data.color == 'Azul'){ this.aconectado = data.status; }
                     }, false);
 
                     es.addEventListener('error', event => {

@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+<head>
+<!-- <link rel="stylesheet" type="text/css" media="all" href="css/reset.css" /> -->
+<script type="text/javascript" src="http://code.jquery.com/jquery.min.js"></script>
+
+<style>
+    body{ background-color: ivory; }
+    #canvas{border:1px solid red;}
+</style>
+
+<script>
+$(function(){
+    window.requestAnimFrame = (function(){
+      return  window.requestAnimationFrame       ||
+              window.webkitRequestAnimationFrame ||
+              window.mozRequestAnimationFrame    ||
+              window.oRequestAnimationFrame      ||
+              window.msRequestAnimationFrame     ||
+              function( callback ){
+                window.setTimeout(callback, 1000 / 60);
+              };
+    })();
+
+    var canvas = document.getElementById("canvas"),
+        cx = canvas.getContext("2d");
+
+    function Card(){
+      this.xa = 80;
+      this.ya = 40;
+      this.dega = 90;      
+      this.imga=new Image();
+
+      this.init=function(){
+
+        // "var self=this" makes myCard available in the img.onload function
+        // otherwise "this" inside img.onload refers to the img
+        var self=this;
+
+        this.imga.onload = function() 
+        {
+            self.drawRotated();
+            loop();
+        }
+        this.imga.src = "file:///D:/ProyectosBatiz/Auto5G/GitRepo/Webserver/img/carro_azul.png";  
+      }
+
+      // x,y need to be this.x and this.y
+
+      this.drawRotated = function(){
+        cx.setTransform(1, 0, 0, 1, this.xa, this.ya); // sets scale and origin
+        cx.rotate(this.dega * Math.PI / 180);
+        cx.drawImage(this.imga, -this.imga.width / 2, -this.imga.height / 2);
+      }
+
+    }
+
+    function Dard(){
+      this.xb = 930;
+      this.yb = 40;
+      this.degb = 180;      
+      this.imgb=new Image();
+
+      this.init=function(){
+
+        // "var self=this" makes myCard available in the img.onload function
+        // otherwise "this" inside img.onload refers to the img
+        var self=this;
+
+        this.imgb.onload = function() 
+        {
+            self.drawRotated();
+            loop();
+        }
+        this.imgb.src = "file:///D:/ProyectosBatiz/Auto5G/GitRepo/Webserver/img/carro_rojo.png";  
+      }
+
+      // x,y need to be this.x and this.y
+
+      this.drawRotated = function(){
+        cx.setTransform(1, 0, 0, 1, this.xb, this.yb); // sets scale and origin
+        cx.rotate(this.degb * Math.PI / 180);
+        cx.drawImage(this.imgb, -this.imgb.width / 2, -this.imgb.height / 2);
+      }
+
+    }
+
+    var myCard = new Card();
+    myCard.init();
+    var myDard = new Dard();
+    myDard.init();
+
+    function loop(){
+
+      requestAnimFrame(loop);
+
+      cx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (myCard.dega >= 90 && myCard.dega < 180){
+          if (myCard.xa < 910) myCard.xa+=2;
+          else myCard.dega++;
+      }
+      else if (myCard.dega >= 180 && myCard.dega < 270){
+          if (myCard.ya < 440) myCard.ya+=2;
+          else myCard.dega++;
+      }
+      else if (myCard.dega >= 270 && myCard.dega < 360){
+          if (myCard.xa > 80) myCard.xa-=2;
+          else{
+            myCard.dega++;
+            if (myCard.dega == 360) myCard.dega = 0;
+          }
+      }
+      else{
+          if (myCard.ya > 40) myCard.ya-=2;
+          else myCard.dega++;
+      }
+      myCard.drawRotated();
+
+      if (myDard.degb >= 90 && myDard.degb < 180){
+          if (myDard.xb < 910) myDard.xb+=2;
+          else myDard.degb++;
+      }
+      else if (myDard.degb >= 180 && myDard.degb < 270){
+          if (myDard.yb < 440) myDard.yb+=2;
+          else myDard.degb++;
+      }
+      else if (myDard.degb >= 270 && myDard.degb < 360){
+          if (myDard.xb > 80) myDard.xb-=2;
+          else{
+            myDard.degb++;
+            if (myDard.degb == 360) myDard.degb = 0;
+          }
+      }
+      else{
+          if (myDard.yb > 40) myDard.yb-=2;
+          else myDard.degb++;
+      }
+      myDard.drawRotated();
+
+    }
+
+
+}); // end $(function(){});
+</script>
+
+</head>
+
+<body>
+    <canvas id="canvas" width=960 height=480></canvas>
+</body>
+</html>

@@ -26,16 +26,17 @@ WiFiClient wf;
 unsigned int posb,posf,trash;
 int blockNum = 5;
 byte bufferLen = 18;
-byte readBlockData[18];
+byte readBlockData[20];
 MFRC522::StatusCode status;
 
 //color de carro
-String color = "Rojo";   
+String color = "Verde";   
 bool llama;
 
-bool ReadBack(int blockNum, byte readBlockData[]) 
+bool ReadBack(int blockNum, byte *readBlockData) 
 {
   /* Reading data from the Block */
+  bufferLen = 18;
   status = Back.MIFARE_Read(blockNum, readBlockData, &bufferLen);
   if (status != MFRC522::STATUS_OK)
   {
@@ -50,9 +51,10 @@ bool ReadBack(int blockNum, byte readBlockData[])
   }
   
 }
-bool ReadFront(int blockNum, byte readBlockData[]) 
+bool ReadFront(int blockNum, byte *readBlockData) 
 {
   /* Reading data from the Block */
+  bufferLen = 18;
   status = Front.MIFARE_Read(blockNum, readBlockData, &bufferLen);
   if (status != MFRC522::STATUS_OK)
   {

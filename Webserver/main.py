@@ -10,6 +10,7 @@ import datetime
 import uuid
 import random
 from starlette.responses import RedirectResponse
+from coord import coordenadas
 
 # -------- Inicia codigo para SSE
 from sse_starlette.sse import EventSourceResponse
@@ -60,23 +61,32 @@ async def message_stream(request: Request):
 
             # Checks for new messages and return them to client if any
             try:
-                qobj = await asyncio.wait_for(qPosiciones.get(), 5)
+                qobj = await asyncio.wait_for(qPosiciones.get(), 300)
             except:
                 qobj = {
-                    'color': 'Rojo',
+                    'tipo': 'message',
+                    'carro': 'Rojo',
                     'front': 1,
                     'back': 100
                 }
-            color = qobj['color']
-            front = qobj['front']
-            back = qobj['back']
-                
-            yield {
-                    'event': 'message',
+            color = qobj['carro']
+            tipo = qobj['tipo']
+
+            if tipo == 'message':
+                front = qobj['front']
+                back = qobj['back']
+                datastr = '{"color": "' + color + '", "front": ' + str(front) + ', "back": ' + str(back) + '}'
+            elif tipo == 'connect':
+                status = qobj['status']
+                datastr = '{"color": "' + color + '", "status": ' + status + '}'
+            
+            eobj = {
+                    'event': tipo,
                     'id': 'message_id',
                     'retry': RETRY_TIMEOUT,
-                    'data':'{"color": "' + color + '", "front": ' + str(front) + ', "back": ' + str(back) + '}'
+                    'data': datastr
             }
+            yield eobj
 
             #await asyncio.sleep(STREAM_DELAY)
 
@@ -132,7 +142,15 @@ async def _carrito(carro):
     x = str(uuid.uuid4())
     carros[carro]['llave'] = x
     carros[carro]['ocupado'] = 'true'
-    print(x)
+    qobj = {
+        'tipo': 'connect',
+        'carro': carro,
+        'status': 'true'
+    }
+    qPosiciones.put_nowait(qobj)
+    while not carros[carro]['queue'].empty(): 
+        carros[carro]['queue'].get_nowait()
+        carros[carro]['queue'].task_done()
 
     async with aiofiles.open("./archivosHTML/control.html", mode="r") as f:
         html = await f.read()
@@ -145,6 +163,13 @@ async def _carrito(carro):
 async def _desconecta(carro, status_code = 200):
     carros[carro]['ocupado'] = 'false'
     carros[carro]['llave'] = str(uuid.uuid4())
+    qobj = {
+        'tipo': 'connect',
+        'carro': carro,
+        'status': 'false'
+    }
+    qPosiciones.put_nowait(qobj)
+    
     return RedirectResponse(url="/",status_code=302)
 
 
@@ -164,6 +189,7 @@ async def _posicion(carro,front,back):
     carros[carro]['frente'] = front
     carros[carro]['atras'] = back
     qobj = {
+        'tipo': 'message',
         'carro': carro,
         'front': front,
         'back': back
