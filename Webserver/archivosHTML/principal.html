@@ -1,0 +1,250 @@
+<html>
+<style>
+
+.Rojo {
+  position: relative;
+  /*cambiar el color*/
+  background: #FF0000;
+  display: block;
+  height: 100px;
+  width: 100%;
+}
+
+.Verde {
+  position: relative;
+  /*cambiar el color*/
+  background: #00AA00;
+  display: block;
+  height: 100px;
+  width: 100%;
+}
+
+.Azul {
+  position: relative;
+  /*cambiar el color*/
+  background: #0000FF;
+  display: block;
+  height: 100px;
+  width: 100%;
+}
+
+.texto{
+  transition: color 300ms ease-out;
+  line-height: 60px;
+  text-align: center;
+  position: relative;
+  font-weight: 700;
+  font-size: 42px;
+  display: block;
+  opacity: 0.9;
+  color: rgba(255, 255, 255, 0.827);
+}
+
+.xbutton {
+  padding: 10px 30px;
+  box-shadow: 0px 0px 12px -2px rgba(0,0,0,0.5);
+  line-height: 1.2;
+  background: #b036c6;
+  text-decoration: none;
+  color: white;
+  font-size: 14px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  position: relative;
+  transition: background-color .6s ease;
+  overflow: hidden;
+  text-align: left;
+}
+
+.ubutton {
+  padding: 10px 30px;
+  box-shadow: 0px 0px 12px -2px rgba(0,0,0,0.5);
+  line-height: 1.2;
+  background: #686768 !important;
+  text-decoration: none;
+  color: white;
+  font-size: 14px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  position: relative;
+  transition: background-color .6s ease;
+  overflow: hidden;
+  text-align: left;
+}
+
+.mapa {
+  position:\ relative;
+  margin: auto;
+  /*cambiar el color*/
+  background: #666363;
+  display: block;
+  width: 1100;
+  height: 610;
+}
+
+</style>
+<body>
+    <script  src="https://unpkg.com/vue@3"></script>
+    <script  type="text/javascript" src="http://code.jquery.com/jquery.min.js" ></script>
+
+    <div id="app">
+        <div id="info-carros" width="100%">
+            <table width="100%"><tr>
+                <td width="33%">
+                    <div id="carroRojo" class="Rojo texto">
+                        <button class="xbutton" v-bind:class="{ubutton: !rconectado}" v-on:click="desconectaRojo">
+                            Desconectar
+                        </button>
+                        <div>
+                            <span v-html="fRojo"></span>
+                            <span>, </span>
+                            <span v-html="bRojo"></span>
+                        </div>
+                    </div>
+                </td>
+                <td width="33%">
+                    <div id="carroVerde" class="Verde texto">
+                        <button class="xbutton" v-bind:class="{ubutton: !vconectado}" v-on:click="desconectaVerde">Desconectar</button>
+                        <div>
+                            <span v-html="fVerde"></span>
+                            <span>, </span>
+                            <span v-html="bVerde"></span>
+                        </div>
+                    </div>
+                </td>
+                <td width="33%">
+                    <div id="carroAzul" class="Azul texto">
+                        <button class="xbutton" v-bind:class="{ubutton: !aconectado}" v-on:click="desconectaAzul">Desconectar</button>
+                        <div>
+                            <span v-html="fAzul"></span>
+                            <span>, </span>
+                            <span v-html="bAzul"></span>
+                        </div>
+                    </div>
+                </td>
+            </tr></table>
+        </div>
+    </div>
+    <div>
+        <div id="mapa" class="mapa">
+            
+            <canvas id="canvas" width=1100 height=610></canvas>
+        
+        </div>        
+    </div>
+
+    <script>
+
+        var canvas = document.getElementById("canvas"),
+        cx = canvas.getContext("2d");
+
+        function Red(){
+            this.x = 0;
+            this.y = 0;
+            this.deg = 0;      
+            this.imga=new Image();
+            
+            this.init = function(){
+                var self=this;
+            
+                this.imga.onload = function() 
+                {
+                    self.drawRotated();
+                    console.log('Termine onload');
+                }
+                
+                this.imga.src = "/img/carro_rojo.png"; 
+                console.log('Termine init'); 
+            }
+        
+            // x,y need to be this.x and this.y
+            this.drawRotated = function(){
+                cx.setTransform(1, 0, 0, 1, this.x, this.y); // sets scale and origin
+                cx.rotate(-this.deg);
+                cx.drawImage(this.imga, -this.imga.width / 2, -this.imga.height / 2);
+                cx.setTransform(1, 0, 0, 1, 0, 0);
+            }
+        
+        }
+
+        const {createApp} = Vue
+
+        createApp({
+            data() {
+                return {
+                    colorCarro: 'Rojo',
+                    fRojo: 0,
+                    fVerde: 0,
+                    fAzul: 0,
+                    bRojo: 0,
+                    bVerde: 0,
+                    bAzul: 0,
+                    
+                    rconectado: false,
+                    vconectado: false,
+                    aconectado: false,
+
+                    myRedCar: new Red()
+                }
+            },
+            created() {
+                this.myRedCar.init();
+                this.setupStream();
+            },
+            methods: {
+                desconectaRojo(){ if (rconectado) fetch("/desconecta/Rojo"); },
+                desconectaVerde(){ if (vconectado) fetch("/desconecta/Verde"); },
+                desconectaAzul(){ if (aconectado) fetch("/desconecta/Azul"); },
+                
+                setupStream() {
+                    
+                    let es = new EventSource('/stream');
+                    console.log('Setting up events');
+
+                    es.addEventListener('message', event => {
+                        let data = JSON.parse(event.data);
+                        if (data.color == 'Rojo'){
+                            this.fRojo = data.front;
+                            this.bRojo = data.back;
+                            this.myRedCar.x = data.coordx;
+                            this.myRedCar.y = data.coordy;
+                            this.myRedCar.deg = data.rad;
+                        }
+                        else if (data.color == 'Verde'){
+                            this.fVerde = data.front;
+                            this.bVerde = data.back;
+                        }
+                        else if (data.color == 'Azul'){
+                            this.fAzul = data.front;
+                            this.bAzul = data.back;
+                        }
+
+                        cx.clearRect(0, 0, canvas.width, canvas.height);
+                        this.myRedCar.drawRotated();
+
+                    }, false);
+
+                    es.addEventListener('connect', event => {
+                        console.log('connect');
+                        console.log(event.data);
+                        let data = JSON.parse(event.data);
+                        console.log(data.color);
+                        console.log(data.status);
+                        if (data.color == 'Rojo'){ this.rconectado = data.status; }
+                        else if (data.color == 'Verde'){ this.vconectado = data.status; }
+                        else if (data.color == 'Azul'){ this.aconectado = data.status; }
+                    }, false);
+
+                    es.addEventListener('error', event => {
+                        if (event.readyState == EventSource.CLOSED) {
+                            console.log('Event was closed');
+                            console.log(EventSource);
+                        }
+                    }, false);
+                }
+            }
+        }).mount('#app')
+
+    </script>
+</body>
+</html>
