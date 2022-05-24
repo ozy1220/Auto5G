@@ -1,7 +1,7 @@
 from cgitb import reset
 from distutils.filelist import translate_pattern
 from fastapi import FastAPI, Response, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.encoders import jsonable_encoder
 import uvicorn
 import asyncio
@@ -11,6 +11,7 @@ import uuid
 import random
 from starlette.responses import RedirectResponse
 from coord import coordenadas
+import math
 
 # -------- Inicia codigo para SSE
 from sse_starlette.sse import EventSourceResponse
@@ -67,7 +68,10 @@ async def message_stream(request: Request):
                     'tipo': 'message',
                     'carro': 'Rojo',
                     'front': 1,
-                    'back': 100
+                    'back': 100,
+                    'coordx':0,
+                    'coordy':0,
+                    'rad':0
                 }
             color = qobj['carro']
             tipo = qobj['tipo']
@@ -75,7 +79,10 @@ async def message_stream(request: Request):
             if tipo == 'message':
                 front = qobj['front']
                 back = qobj['back']
-                datastr = '{"color": "' + color + '", "front": ' + str(front) + ', "back": ' + str(back) + '}'
+                coordx = int(qobj['coordx'])
+                coordy = int(qobj['coordy'])
+                rad = qobj['rad'] 
+                datastr = '{"color": "' + color + '", "front": ' + str(front) + ', "back": ' + str(back) + ', "coordx": ' + str(coordx) +', "coordy": ' + str(coordy) +', "rad": ' + str(rad) + '}'
             elif tipo == 'connect':
                 status = qobj['status']
                 datastr = '{"color": "' + color + '", "status": ' + status + '}'
@@ -128,7 +135,7 @@ async def pagAdmin():
 @app.get("/avanzaMotores/{carro}")
 async def _avanza(carro):
     try:
-        res = await asyncio.wait_for(carros[carro]['queue'].get(), timeout = 50.0)
+        res = await asyncio.wait_for(carros[carro]['queue'].get(), timeout = 20.0)
         carros[carro]['queue'].task_done()
         carros[carro]['dire'] = res
         return str(res)
@@ -182,9 +189,42 @@ async def direccion(response: Response, param_dir, carro, hash):
     carros[carro]['queue'].put_nowait(param_dir)
     return 'OK'
 
+@app.get("/img/{archivo}", response_class=FileResponse)
+async def _sirvearchivo(archivo):
+    return FileResponse(f"./img/{archivo}")
+
 
 @app.get("/posicion/{carro}/{front}/{back}")
 async def _posicion(carro,front,back):
+ 
+    if (carros[carro]['frente'] != front and carros[carro]['atras'] != back):
+        dx = coordenadas[front]['x']-coordenadas[back]['x']
+        dy = coordenadas[front]['y']-coordenadas[back]['y']
+        px = coordenadas[front]['x']*5/1000
+        py = coordenadas[front]['y']*5/1000
+    elif carros[carro]['frente'] != front:
+        dx = coordenadas[front]['x']-coordenadas[str(carros[carro]['frente'])]['x']
+        dy = coordenadas[front]['y']-coordenadas[str(carros[carro]['frente'])]['y']
+        px = coordenadas[front]['x']*5/1000
+        py = coordenadas[front]['y']*5/1000
+    else:
+        dx = coordenadas[str(carros[carro]['atras'])]['x'] - coordenadas[front]['x']
+        dy = coordenadas[str(carros[carro]['atras'])]['y'] - coordenadas[back]['y']
+        px = coordenadas[back]['x']*5/1000
+        py = coordenadas[back]['y']*5/1000
+
+    #falta encontrar el centro del carro siguendo la direccion
+    if dx == 0:
+        if (dy > 0): pend = 0
+        else: pend = 180
+    elif dy == 0:
+        if (dx > 0): pend = 270
+        else: pend = 90
+    else: 
+        pend = -dy/dx
+        pend = math.atan(pend)
+        if pend < math.pi/2: pend = (math.pi/2)-pend    
+        else: pend = (5*math.pi)/2 - pend
 
     carros[carro]['frente'] = front
     carros[carro]['atras'] = back
@@ -192,7 +232,10 @@ async def _posicion(carro,front,back):
         'tipo': 'message',
         'carro': carro,
         'front': front,
-        'back': back
+        'back': back,
+        'coordx': px,
+        'coordy': py,
+        'rad': pend
     }
     qPosiciones.put_nowait(qobj)
     

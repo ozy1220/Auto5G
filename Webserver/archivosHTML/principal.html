@@ -72,10 +72,20 @@
   text-align: left;
 }
 
+.mapa {
+  position:\ relative;
+  margin: auto;
+  /*cambiar el color*/
+  background: #666363;
+  display: block;
+  width: 1100;
+  height: 610;
+}
 
 </style>
 <body>
-    <script src="https://unpkg.com/vue@3"></script>
+    <script  src="https://unpkg.com/vue@3"></script>
+    <script  type="text/javascript" src="http://code.jquery.com/jquery.min.js" ></script>
 
     <div id="app">
         <div id="info-carros" width="100%">
@@ -114,12 +124,49 @@
                 </td>
             </tr></table>
         </div>
-        <div id="mapa">
-
+    </div>
+    <div>
+        <div id="mapa" class="mapa">
+            
+            <canvas id="canvas" width=1100 height=610></canvas>
+        
         </div>        
     </div>
 
     <script>
+
+        var canvas = document.getElementById("canvas"),
+        cx = canvas.getContext("2d");
+
+        function Red(){
+            this.x = 0;
+            this.y = 0;
+            this.deg = 0;      
+            this.imga=new Image();
+            
+            this.init = function(){
+                var self=this;
+            
+                this.imga.onload = function() 
+                {
+                    self.drawRotated();
+                    console.log('Termine onload');
+                }
+                
+                this.imga.src = "/img/carro_rojo.png"; 
+                console.log('Termine init'); 
+            }
+        
+            // x,y need to be this.x and this.y
+            this.drawRotated = function(){
+                cx.setTransform(1, 0, 0, 1, this.x, this.y); // sets scale and origin
+                cx.rotate(-this.deg);
+                cx.drawImage(this.imga, -this.imga.width / 2, -this.imga.height / 2);
+                cx.setTransform(1, 0, 0, 1, 0, 0);
+            }
+        
+        }
+
         const {createApp} = Vue
 
         createApp({
@@ -132,13 +179,16 @@
                     bRojo: 0,
                     bVerde: 0,
                     bAzul: 0,
-
+                    
                     rconectado: false,
                     vconectado: false,
-                    aconectado: false
+                    aconectado: false,
+
+                    myRedCar: new Red()
                 }
             },
             created() {
+                this.myRedCar.init();
                 this.setupStream();
             },
             methods: {
@@ -156,6 +206,9 @@
                         if (data.color == 'Rojo'){
                             this.fRojo = data.front;
                             this.bRojo = data.back;
+                            this.myRedCar.x = data.coordx;
+                            this.myRedCar.y = data.coordy;
+                            this.myRedCar.deg = data.rad;
                         }
                         else if (data.color == 'Verde'){
                             this.fVerde = data.front;
@@ -165,6 +218,10 @@
                             this.fAzul = data.front;
                             this.bAzul = data.back;
                         }
+
+                        cx.clearRect(0, 0, canvas.width, canvas.height);
+                        this.myRedCar.drawRotated();
+
                     }, false);
 
                     es.addEventListener('connect', event => {

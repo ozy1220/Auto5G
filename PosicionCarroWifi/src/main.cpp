@@ -30,7 +30,7 @@ byte readBlockData[20];
 MFRC522::StatusCode status;
 
 //color de carro
-String color = "Verde";   
+String color = "Rojo";   
 bool llama;
 
 bool ReadBack(int blockNum, byte *readBlockData) 
@@ -80,6 +80,7 @@ void postEnWeb() {
   http.begin(wf, "10.70.1.19", 8080, link);     //Specify request destination
   
   int code = http.GET();
+  Serial.println(code);
   http.end();
 }
 
