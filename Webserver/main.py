@@ -11,6 +11,8 @@ import uuid
 import random
 from starlette.responses import RedirectResponse
 from coord import coordenadas
+import auxiliares
+from auxiliares import carros
 import math
 
 # -------- Inicia codigo para SSE
@@ -20,31 +22,10 @@ from sse_starlette.sse import EventSourceResponse
 app = FastAPI()
 #del 0-2 van a ser los sensores de el frente
 #del 3-5 van a ser los sensores traseros
-carros = {
-    'Azul':{
-        'frente': -1,
-        'atras': -1,
-        'dire': 'V',
-        'ocupado': 'false',
-        'llave' : '123456',
-        'queue': asyncio.Queue()
-    },
-    'Verde':{
-        'frente': -1,
-        'atras': -1,
-        'dire': 'V',
-        'ocupado': 'false',
-        'llave' : '123456',
-        'queue': asyncio.Queue()
-    },
-    'Rojo':{
-        'frente': -1,
-        'atras': -1,
-        'dire': 'V',
-        'ocupado': 'false',
-        'llave' : '123456',
-        'queue': asyncio.Queue()
-    }
+vel = {
+    'vh': '250',
+    'vl': '100',
+    'vn': '150' 
 }
 qPosiciones = asyncio.Queue()
 
@@ -135,12 +116,22 @@ async def pagAdmin():
 @app.get("/avanzaMotores/{carro}")
 async def _avanza(carro):
     try:
-        res = await asyncio.wait_for(carros[carro]['queue'].get(), timeout = 20.0)
-        carros[carro]['queue'].task_done()
-        carros[carro]['dire'] = res
+        res = await asyncio.wait_for(auxiliares.carros[carro]['queue'].get(), timeout = 20.0)
+        auxiliares.carros[carro]['queue'].task_done()
+        n_dir = auxiliares.overrideDireccion(carro, res)
+        auxiliares.carros[carro]['dire'] = res
+        if n_dir != res:
+            auxiliares.carros[carro]['overrides'] += 1
+            if auxiliares.carros[carro]['overrides'] < 2:
+                res = n_dir
+        else:
+            auxiliares.carros[carro]['overrides'] = 0
+        
+
+        
         return str(res)
     except asyncio.TimeoutError:
-        carros[carro]['dire'] = 'V'
+        auxiliares.carros[carro]['dire'] = 'V'
         return str('V')
 
 
@@ -179,15 +170,21 @@ async def _desconecta(carro, status_code = 200):
     
     return RedirectResponse(url="/",status_code=302)
 
+@app.get("/velocidad/{carro}")
+async def velocidad(carro):
+    st = vel['vh'] + vel['vl'] + vel['vn']
+    return st
+
 
 @app.get("/direccion/{param_dir}/{carro}/{hash}")
 async def direccion(response: Response, param_dir, carro, hash):
     response.headers["access-control-allow-origin"] = "*"
 
-    if (hash != carros[carro]['llave']): return "Error(no eres quien lo controla)"
+    if (hash != auxiliares.carros[carro]['llave']): return "Error(no eres quien lo controla)"
 
-    carros[carro]['queue'].put_nowait(param_dir)
+    auxiliares.carros[carro]['queue'].put_nowait(param_dir)
     return 'OK'
+
 
 @app.get("/img/{archivo}", response_class=FileResponse)
 async def _sirvearchivo(archivo):
@@ -197,47 +194,23 @@ async def _sirvearchivo(archivo):
 @app.get("/posicion/{carro}/{front}/{back}")
 async def _posicion(carro,front,back):
  
-    if (carros[carro]['frente'] != front and carros[carro]['atras'] != back):
-        dx = coordenadas[front]['x']-coordenadas[back]['x']
-        dy = coordenadas[front]['y']-coordenadas[back]['y']
-        px = coordenadas[front]['x']*5/1000
-        py = coordenadas[front]['y']*5/1000
-    elif carros[carro]['frente'] != front:
-        dx = coordenadas[front]['x']-coordenadas[str(carros[carro]['frente'])]['x']
-        dy = coordenadas[front]['y']-coordenadas[str(carros[carro]['frente'])]['y']
-        px = coordenadas[front]['x']*5/1000
-        py = coordenadas[front]['y']*5/1000
-    else:
-        dx = coordenadas[str(carros[carro]['atras'])]['x'] - coordenadas[front]['x']
-        dy = coordenadas[str(carros[carro]['atras'])]['y'] - coordenadas[back]['y']
-        px = coordenadas[back]['x']*5/1000
-        py = coordenadas[back]['y']*5/1000
-
-    #falta encontrar el centro del carro siguendo la direccion
-    if dx == 0:
-        if (dy > 0): pend = 0
-        else: pend = 180
-    elif dy == 0:
-        if (dx > 0): pend = 270
-        else: pend = 90
-    else: 
-        pend = -dy/dx
-        pend = math.atan(pend)
-        if pend < math.pi/2: pend = (math.pi/2)-pend    
-        else: pend = (5*math.pi)/2 - pend
-
-    carros[carro]['frente'] = front
-    carros[carro]['atras'] = back
+    posx, posy, angulo = auxiliares.estimaNuevaPosicion(carro, front, back)
+    print(posx)
+    print(posy)
+    print(angulo * 180 / math.pi)
     qobj = {
         'tipo': 'message',
         'carro': carro,
         'front': front,
         'back': back,
-        'coordx': px,
-        'coordy': py,
-        'rad': pend
+        'coordx': posx,
+        'coordy': posy,
+        'rad': angulo
     }
     qPosiciones.put_nowait(qobj)
+
+    dir_actual = auxiliares.carros[carro]['dire']
+    auxiliares.carros[carro]['queue'].put_nowait(dir_actual)
     
     return "acabe"
 

@@ -277,7 +277,11 @@ html, body {{
                         else if (dir == 'S') this.ds = true;
                         else if (dir == '!S') this.ds = false;
                         
-                        if (this.de) dir = 'E';
+                        if (this.dn && this.do) dir = 'W';
+                        else if (this.ds && this.do) dir = 'X';
+                        else if (this.ds && this.de) dir = 'Y';
+                        else if (this.dn && this.de) dir = 'Z';
+                        else if (this.de) dir = 'E';
                         else if (this.do) dir = 'O';
                         else if (this.dn) dir = 'N';
                         else if (this.ds) dir = 'S';
