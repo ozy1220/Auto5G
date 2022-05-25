@@ -192,9 +192,9 @@
                 this.setupStream();
             },
             methods: {
-                desconectaRojo(){ if (rconectado) fetch("/desconecta/Rojo"); },
-                desconectaVerde(){ if (vconectado) fetch("/desconecta/Verde"); },
-                desconectaAzul(){ if (aconectado) fetch("/desconecta/Azul"); },
+                desconectaRojo(){ if (this.rconectado) fetch("/desconecta/Rojo"); },
+                desconectaVerde(){ if (this.vconectado) fetch("/desconecta/Verde"); },
+                desconectaAzul(){ if (this.aconectado) fetch("/desconecta/Azul"); },
                 
                 setupStream() {
                     

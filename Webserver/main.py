@@ -45,15 +45,10 @@ async def message_stream(request: Request):
             try:
                 qobj = await asyncio.wait_for(qPosiciones.get(), 300)
             except:
-                qobj = {
-                    'tipo': 'message',
-                    'carro': 'Rojo',
-                    'front': 1,
-                    'back': 100,
-                    'coordx':0,
-                    'coordy':0,
-                    'rad':0
-                }
+                # Si no hubo eventos, no mandes nada.
+                continue
+
+            print(qobj)
             color = qobj['carro']
             tipo = qobj['tipo']
 
@@ -85,19 +80,19 @@ async def message_stream(request: Request):
 @app.get("/", response_class=HTMLResponse)
 async def root():
 
-    if carros['Rojo']['ocupado'] == 'true': linkRojo = '#'
+    if carros['Rojo'].ocupado == 'true': linkRojo = '#'
     else: linkRojo = '/control/Rojo'
-    if carros['Azul']['ocupado'] == 'true': linkAzul = '#'
+    if carros['Azul'].ocupado == 'true': linkAzul = '#'
     else: linkAzul = '/control/Azul'
-    if carros['Verde']['ocupado'] == 'true': linkVerde = '#'
+    if carros['Verde'].ocupado == 'true': linkVerde = '#'
     else: linkVerde = '/control/Verde'
 
     async with aiofiles.open("./archivosHTML/inicio.html", mode="r") as f:
         html = await f.read()
 
-    html = html.format(ocupadoRojo = carros['Rojo']['ocupado'], 
-                       ocupadoAzul = carros['Azul']['ocupado'],
-                       ocupadoVerde = carros['Verde']['ocupado'],
+    html = html.format(ocupadoRojo = carros['Rojo'].ocupado, 
+                       ocupadoAzul = carros['Azul'].ocupado,
+                       ocupadoVerde = carros['Verde'].ocupado,
                        linkRojo = linkRojo,
                        linkAzul = linkAzul,
                        linkVerde = linkVerde)
@@ -116,39 +111,41 @@ async def pagAdmin():
 @app.get("/avanzaMotores/{carro}")
 async def _avanza(carro):
     try:
-        res = await asyncio.wait_for(auxiliares.carros[carro]['queue'].get(), timeout = 20.0)
-        auxiliares.carros[carro]['queue'].task_done()
-        n_dir = auxiliares.overrideDireccion(carro, res)
-        auxiliares.carros[carro]['dire'] = res
-        if n_dir != res:
-            auxiliares.carros[carro]['overrides'] += 1
-            if auxiliares.carros[carro]['overrides'] < 2:
-                res = n_dir
-        else:
-            auxiliares.carros[carro]['overrides'] = 0
-        
 
-        
-        return str(res)
+        if not auxiliares[carro].queue.empty():
+            res = auxiliares[carro].queue.get_nowait()
+            auxiliares[carro].queue.task_done()
+            auxiliares[carro].dire = res
+
+        elif auxiliares[carro].dire == 'V':  
+            try:
+                res = await asyncio.wait_for(auxiliares.carros[carro].queue.get(), timeout = 20.0)
+            except:
+                return str('V')
+        else:
+            res = auxiliares.carros[carro].dire
+            dir_nueva = auxiliares.overrideDireccion(carro, dir_actual)
+            return str(dir_nueva) 
+
     except asyncio.TimeoutError:
-        auxiliares.carros[carro]['dire'] = 'V'
+        auxiliares.carros[carro].dire = 'V'
         return str('V')
 
 
 @app.get("/control/{carro}", response_class=HTMLResponse)
 async def _carrito(carro):
     x = str(uuid.uuid4())
-    carros[carro]['llave'] = x
-    carros[carro]['ocupado'] = 'true'
+    carros[carro].llave = x
+    carros[carro].ocupado = 'true'
     qobj = {
         'tipo': 'connect',
         'carro': carro,
         'status': 'true'
     }
     qPosiciones.put_nowait(qobj)
-    while not carros[carro]['queue'].empty(): 
-        carros[carro]['queue'].get_nowait()
-        carros[carro]['queue'].task_done()
+    while not carros[carro].queue.empty(): 
+        carros[carro].queue.get_nowait()
+        carros[carro].queue.task_done()
 
     async with aiofiles.open("./archivosHTML/control.html", mode="r") as f:
         html = await f.read()
@@ -159,8 +156,8 @@ async def _carrito(carro):
 
 @app.get("/desconecta/{carro}")
 async def _desconecta(carro, status_code = 200):
-    carros[carro]['ocupado'] = 'false'
-    carros[carro]['llave'] = str(uuid.uuid4())
+    carros[carro].ocupado = 'false'
+    carros[carro].llave = str(uuid.uuid4())
     qobj = {
         'tipo': 'connect',
         'carro': carro,
@@ -169,11 +166,6 @@ async def _desconecta(carro, status_code = 200):
     qPosiciones.put_nowait(qobj)
     
     return RedirectResponse(url="/",status_code=302)
-
-@app.get("/velocidad/{carro}")
-async def velocidad(carro):
-    st = vel['vh'] + vel['vl'] + vel['vn']
-    return st
 
 
 @app.get("/direccion/{param_dir}/{carro}/{hash}")
@@ -195,9 +187,6 @@ async def _sirvearchivo(archivo):
 async def _posicion(carro,front,back):
  
     posx, posy, angulo = auxiliares.estimaNuevaPosicion(carro, front, back)
-    print(posx)
-    print(posy)
-    print(angulo * 180 / math.pi)
     qobj = {
         'tipo': 'message',
         'carro': carro,
@@ -213,6 +202,12 @@ async def _posicion(carro,front,back):
     auxiliares.carros[carro]['queue'].put_nowait(dir_actual)
     
     return "acabe"
+
+
+@app.get("/velocidad/{carro}")
+async def velocidad(carro):
+    st = vel['vh'] + vel['vl'] + vel['vn']
+    return st
 
 
 if __name__ == '__main__':

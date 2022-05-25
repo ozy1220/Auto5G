@@ -2,8 +2,29 @@ import asyncio
 import math
 from coord import coordenadas
 
+class Carro:
+    def __init__(self):
+        self.frente = -1
+        self.atras = -1
+        self.dire = 'V'
+        self.llave = ''
+        self.ocupado = 'false'
+        self.xf = 0
+        self.yf = 0
+        self.xa = 0
+        self.ya = 0
+        self.x = 0
+        self.y = 0
+        self.angulo = 0
+        self.queue = asyncio.Queue()
+
 carros = {
-    'Azul':{
+    'Azul': Carro(),
+    'Verde': Carro(),
+    'Rojo': Carro()
+}
+
+"""    'Azul':{
         'frente': -1,
         'atras': -1,
         'dire': 'V',
@@ -40,6 +61,7 @@ carros = {
         'angulo': 0
     }
 }
+"""
 
 # Triangulo en los lectores del coche
 tc_ca = 10.7
