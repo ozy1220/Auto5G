@@ -30,7 +30,7 @@ byte readBlockData[20];
 MFRC522::StatusCode status;
 
 //color de carro
-String color = "Rojo";   
+String color = "Azul";   
 bool llama;
 
 bool ReadBack(int blockNum, byte *readBlockData) 

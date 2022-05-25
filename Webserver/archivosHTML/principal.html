@@ -139,8 +139,8 @@
         cx = canvas.getContext("2d");
 
         function Red(){
-            this.x = 0;
-            this.y = 0;
+            this.x = 90;
+            this.y = 60;
             this.deg = 0;      
             this.imga=new Image();
             
@@ -153,13 +153,13 @@
                     console.log('Termine onload');
                 }
                 
-                this.imga.src = "/img/carro_rojo.png"; 
+                this.imga.src = "/img/carro_rojo_h.png"; 
                 console.log('Termine init'); 
             }
         
             // x,y need to be this.x and this.y
             this.drawRotated = function(){
-                cx.setTransform(1, 0, 0, 1, this.x, this.y); // sets scale and origin
+                cx.setTransform(1, 0, 0, 1, this.x, canvas.height - this.y); // sets scale and origin
                 cx.rotate(-this.deg);
                 cx.drawImage(this.imga, -this.imga.width / 2, -this.imga.height / 2);
                 cx.setTransform(1, 0, 0, 1, 0, 0);
@@ -192,9 +192,9 @@
                 this.setupStream();
             },
             methods: {
-                desconectaRojo(){ if (rconectado) fetch("/desconecta/Rojo"); },
-                desconectaVerde(){ if (vconectado) fetch("/desconecta/Verde"); },
-                desconectaAzul(){ if (aconectado) fetch("/desconecta/Azul"); },
+                desconectaRojo(){ if (this.rconectado) fetch("/desconecta/Rojo"); },
+                desconectaVerde(){ if (this.vconectado) fetch("/desconecta/Verde"); },
+                desconectaAzul(){ if (this.aconectado) fetch("/desconecta/Azul"); },
                 
                 setupStream() {
                     
@@ -206,8 +206,8 @@
                         if (data.color == 'Rojo'){
                             this.fRojo = data.front;
                             this.bRojo = data.back;
-                            this.myRedCar.x = data.coordx;
-                            this.myRedCar.y = data.coordy;
+                            this.myRedCar.x = data.coordx * 5;
+                            this.myRedCar.y = data.coordy * 5;
                             this.myRedCar.deg = data.rad;
                         }
                         else if (data.color == 'Verde'){
