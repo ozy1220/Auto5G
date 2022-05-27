@@ -12,8 +12,11 @@ import random
 from starlette.responses import RedirectResponse
 from coord import coordenadas
 import auxiliares
-from auxiliares import carros
+from auxiliares import SIN_CONEXION, carros
 import math
+import timeit
+
+
 
 # -------- Inicia codigo para SSE
 from sse_starlette.sse import EventSourceResponse
@@ -22,16 +25,38 @@ from sse_starlette.sse import EventSourceResponse
 app = FastAPI()
 #del 0-2 van a ser los sensores de el frente
 #del 3-5 van a ser los sensores traseros
-vel = {
-    'vh': '250',
-    'vl': '100',
-    'vn': '150' 
-}
+
 qPosiciones = asyncio.Queue()
 
-# ---------- Inicio codigo para SSE
+# ---------- Termina codigo para SSE
 STREAM_DELAY = 1  # second
 RETRY_TIMEOUT = 15000  # milisecond
+
+
+# ------------  AUXILIARES
+
+def actualizaEstadoCarro(carro):
+    estado = auxiliares.validaEstadoCarro(carro)
+    if estado != auxiliares.carros[carro].estatus_conexion:
+        # Genera estado conexion
+        auxiliares.carros[carro].estatus_conexion = estado
+        qobj = {
+            'tipo': 'connect',
+            'carro': carro,
+            'status': carros[carro].ocupado,
+            'conexion': estado
+        }
+        qPosiciones.put_nowait(qobj)
+
+
+def validaCarros():
+    actualizaEstadoCarro('Rojo')
+    actualizaEstadoCarro('Verde')
+    actualizaEstadoCarro('Azul')
+
+# ------------  FIN AUXILIARES
+
+
 
 @app.get('/stream')
 async def message_stream(request: Request):
@@ -61,7 +86,8 @@ async def message_stream(request: Request):
                 datastr = '{"color": "' + color + '", "front": ' + str(front) + ', "back": ' + str(back) + ', "coordx": ' + str(coordx) +', "coordy": ' + str(coordy) +', "rad": ' + str(rad) + '}'
             elif tipo == 'connect':
                 status = qobj['status']
-                datastr = '{"color": "' + color + '", "status": ' + status + '}'
+                conexion = qobj['conexion']
+                datastr = '{"color": "' + color + '", "status": ' + status + ', "conexion": ' + str(conexion) + '}'
             
             eobj = {
                     'event': tipo,
@@ -110,22 +136,20 @@ async def pagAdmin():
 
 @app.get("/avanzaMotores/{carro}")
 async def _avanza(carro):
+
+    # seccion de heartbeats
+    auxiliares.heartbeatMotores(carro)
+    validaCarros()
+
     try:
 
-        if not auxiliares[carro].queue.empty():
-            res = auxiliares[carro].queue.get_nowait()
-            auxiliares[carro].queue.task_done()
-            auxiliares[carro].dire = res
-
-        elif auxiliares[carro].dire == 'V':  
-            try:
-                res = await asyncio.wait_for(auxiliares.carros[carro].queue.get(), timeout = 20.0)
-            except:
-                return str('V')
-        else:
-            res = auxiliares.carros[carro].dire
-            dir_nueva = auxiliares.overrideDireccion(carro, dir_actual)
-            return str(dir_nueva) 
+        res = await asyncio.wait_for(auxiliares.carros[carro].queue.get(), timeout = 50.0)
+        auxiliares.carros[carro].dire = res
+        auxiliares.carros[carro].queue.task_done()
+        
+        dir_nueva = auxiliares.overrideDireccion(carro, res)
+        print(f'Res /avanzaMotores/{carro} :  res = {res}, dir_final = {dir_nueva}')
+        return str(dir_nueva) 
 
     except asyncio.TimeoutError:
         auxiliares.carros[carro].dire = 'V'
@@ -140,12 +164,17 @@ async def _carrito(carro):
     qobj = {
         'tipo': 'connect',
         'carro': carro,
-        'status': 'true'
+        'status': 'true',
+        'conexion': carros[carro].estatus_conexion
     }
     qPosiciones.put_nowait(qobj)
     while not carros[carro].queue.empty(): 
         carros[carro].queue.get_nowait()
         carros[carro].queue.task_done()
+
+    carros[carro].seccion_f = -1
+    carros[carro].seccion_a = -1
+    carros[carro].sentido = auxiliares.LIMBO
 
     async with aiofiles.open("./archivosHTML/control.html", mode="r") as f:
         html = await f.read()
@@ -161,7 +190,8 @@ async def _desconecta(carro, status_code = 200):
     qobj = {
         'tipo': 'connect',
         'carro': carro,
-        'status': 'false'
+        'status': 'false',
+        'conexion': carros[carro].estatus_conexion
     }
     qPosiciones.put_nowait(qobj)
     
@@ -172,9 +202,9 @@ async def _desconecta(carro, status_code = 200):
 async def direccion(response: Response, param_dir, carro, hash):
     response.headers["access-control-allow-origin"] = "*"
 
-    if (hash != auxiliares.carros[carro]['llave']): return "Error(no eres quien lo controla)"
+    if (hash != 'admin' and hash != auxiliares.carros[carro].llave): return "Error(no eres quien lo controla)"
 
-    auxiliares.carros[carro]['queue'].put_nowait(param_dir)
+    auxiliares.carros[carro].queue.put_nowait(param_dir)
     return 'OK'
 
 
@@ -185,8 +215,11 @@ async def _sirvearchivo(archivo):
 
 @app.get("/posicion/{carro}/{front}/{back}")
 async def _posicion(carro,front,back):
+    # seccion de heartbeats
+    auxiliares.heartbeatPosicion(carro)
+    validaCarros()
  
-    posx, posy, angulo = auxiliares.estimaNuevaPosicion(carro, front, back)
+    posx, posy, angulo, prohibe = auxiliares.calculaSeccion(carro, front, back)
     qobj = {
         'tipo': 'message',
         'carro': carro,
@@ -198,15 +231,17 @@ async def _posicion(carro,front,back):
     }
     qPosiciones.put_nowait(qobj)
 
-    dir_actual = auxiliares.carros[carro]['dire']
-    auxiliares.carros[carro]['queue'].put_nowait(dir_actual)
-    
+    print(prohibe)
+    if prohibe:
+        auxiliares.carros[carro].queue.put_nowait(auxiliares.DIR_PARA)
+
+
     return "acabe"
 
 
 @app.get("/velocidad/{carro}")
 async def velocidad(carro):
-    st = vel['vh'] + vel['vl'] + vel['vn']
+    st = auxiliares.vel['vh'] + auxiliares.vel['vl'] + auxiliares.vel['vn']
     return st
 
 

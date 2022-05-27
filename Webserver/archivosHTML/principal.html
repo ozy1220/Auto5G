@@ -28,6 +28,25 @@
   width: 100%;
 }
 
+.Amarillo {
+  position: relative;
+  /*cambiar el color*/
+  background: #d8db06fb !important;
+  display: block;
+  height: 100px;
+  width: 100%;
+}
+
+.Gris {
+  position: relative;
+  /*cambiar el color*/
+  background: #737375 !important;
+  display: block;
+  height: 100px;
+  width: 100%;
+}
+
+
 .texto{
   transition: color 300ms ease-out;
   line-height: 60px;
@@ -76,7 +95,7 @@
   position:\ relative;
   margin: auto;
   /*cambiar el color*/
-  background: #666363;
+  background: #FFFFFF;
   display: block;
   width: 1100;
   height: 610;
@@ -91,34 +110,28 @@
         <div id="info-carros" width="100%">
             <table width="100%"><tr>
                 <td width="33%">
-                    <div id="carroRojo" class="Rojo texto">
+                    <div id="carroRojo" class="Rojo texto" v-bind:class="[conRojo]">
                         <button class="xbutton" v-bind:class="{ubutton: !rconectado}" v-on:click="desconectaRojo">
                             Desconectar
                         </button>
                         <div>
-                            <span v-html="fRojo"></span>
-                            <span>, </span>
-                            <span v-html="bRojo"></span>
+                            <span>Auto Rojo</span>
                         </div>
                     </div>
                 </td>
                 <td width="33%">
-                    <div id="carroVerde" class="Verde texto">
+                    <div id="carroVerde" class="Verde texto" v-bind:class="[conVerde]">
                         <button class="xbutton" v-bind:class="{ubutton: !vconectado}" v-on:click="desconectaVerde">Desconectar</button>
                         <div>
-                            <span v-html="fVerde"></span>
-                            <span>, </span>
-                            <span v-html="bVerde"></span>
+                            <span>Auto Verde</span>
                         </div>
                     </div>
                 </td>
                 <td width="33%">
-                    <div id="carroAzul" class="Azul texto">
+                    <div id="carroAzul" class="Azul texto" v-bind:class="[conAzul]">
                         <button class="xbutton" v-bind:class="{ubutton: !aconectado}" v-on:click="desconectaAzul">Desconectar</button>
                         <div>
-                            <span v-html="fAzul"></span>
-                            <span>, </span>
-                            <span v-html="bAzul"></span>
+                            <span>Auto Azul</span>
                         </div>
                     </div>
                 </td>
@@ -138,9 +151,21 @@
         var canvas = document.getElementById("canvas"),
         cx = canvas.getContext("2d");
 
-        function Red(){
-            this.x = 90;
-            this.y = 60;
+        function dibujaRect(x1, y1, x2, y2, relleno){
+            if (relleno != ""){
+                cx.fillStyle = relleno;
+                cx.fillRect(x1 * 5, y1 * 5, x2 * 5, y2* 5);
+            }
+            else {
+                cx.beginPath();
+                cx.rect(x1 * 5, y1 * 5, x2 * 5, y2* 5);
+                cx.stroke();
+            }
+        }
+
+        function Carro(color){
+            this.x = -100;
+            this.y = -100;
             this.deg = 0;      
             this.imga=new Image();
             
@@ -153,12 +178,14 @@
                     console.log('Termine onload');
                 }
                 
-                this.imga.src = "/img/carro_rojo_h.png"; 
+                this.imga.src = "/img/carro_" + color + "_h.png"; 
                 console.log('Termine init'); 
             }
         
             // x,y need to be this.x and this.y
             this.drawRotated = function(){
+                console.log(this.x)
+                console.log(this.y)
                 cx.setTransform(1, 0, 0, 1, this.x, canvas.height - this.y); // sets scale and origin
                 cx.rotate(-this.deg);
                 cx.drawImage(this.imga, -this.imga.width / 2, -this.imga.height / 2);
@@ -172,23 +199,32 @@
         createApp({
             data() {
                 return {
-                    colorCarro: 'Rojo',
-                    fRojo: 0,
-                    fVerde: 0,
-                    fAzul: 0,
-                    bRojo: 0,
-                    bVerde: 0,
-                    bAzul: 0,
+
+                    conRojo: 'Gris',
+                    conVerde: 'Gris',
+                    conAzul: 'Gris',
                     
                     rconectado: false,
                     vconectado: false,
                     aconectado: false,
 
-                    myRedCar: new Red()
+                    myRedCar: new Carro('rojo'),
+                    myGreenCar: new Carro('verde'),
+                    myBlueCar: new Carro('azul')
                 }
             },
             created() {
+
+                // Dibuja las lineas
+                dibujaRect(0, 0, 220, 122, "");
+                dibujaRect(24, 24, 66, 16, 'gray');
+                dibujaRect(134, 24, 66, 16, 'gray');
+                dibujaRect(24, 84, 66, 14, 'gray');
+                dibujaRect(134, 84, 66, 14, 'gray');
+
                 this.myRedCar.init();
+                this.myGreenCar.init();
+                this.myBlueCar.init();
                 this.setupStream();
             },
             methods: {
@@ -204,35 +240,60 @@
                     es.addEventListener('message', event => {
                         let data = JSON.parse(event.data);
                         if (data.color == 'Rojo'){
-                            this.fRojo = data.front;
-                            this.bRojo = data.back;
                             this.myRedCar.x = data.coordx * 5;
                             this.myRedCar.y = data.coordy * 5;
                             this.myRedCar.deg = data.rad;
                         }
                         else if (data.color == 'Verde'){
-                            this.fVerde = data.front;
-                            this.bVerde = data.back;
+                            this.myGreenCar.x = this.xVerde = data.coordx * 5;
+                            this.myGreenCar.y = this.yVerde = data.coordy * 5;
+                            this.myGreenCar.deg = this.aVerde = data.rad;
+                            this.aVerde *= 180;
                         }
                         else if (data.color == 'Azul'){
-                            this.fAzul = data.front;
-                            this.bAzul = data.back;
+                            this.myBlueCar.x = data.coordx * 5;
+                            this.myBlueCar.y = data.coordy * 5;
+                            this.myBlueCar.deg = data.rad;
                         }
 
                         cx.clearRect(0, 0, canvas.width, canvas.height);
-                        this.myRedCar.drawRotated();
+
+                        // Dibuja las lineas
+                        dibujaRect(0, 0, 220, 122, "");
+                        dibujaRect(24, 24, 66, 16, 'gray');
+                        dibujaRect(134, 24, 66, 16, 'gray');
+                        dibujaRect(24, 84, 66, 14, 'gray');
+                        dibujaRect(134, 84, 66, 14, 'gray');
+
+                        if (this.conRojo == '') this.myRedCar.drawRotated();
+                        if (this.conVerde == '') this.myGreenCar.drawRotated();
+                        if (this.conAzul == '') this.myBlueCar.drawRotated();
 
                     }, false);
 
                     es.addEventListener('connect', event => {
-                        console.log('connect');
-                        console.log(event.data);
                         let data = JSON.parse(event.data);
-                        console.log(data.color);
-                        console.log(data.status);
-                        if (data.color == 'Rojo'){ this.rconectado = data.status; }
-                        else if (data.color == 'Verde'){ this.vconectado = data.status; }
-                        else if (data.color == 'Azul'){ this.aconectado = data.status; }
+                        if (data.color == 'Rojo'){ 
+                            if (data.conexion == 0) this.conRojo = 'Gris';
+                            else if (data.conexion == 3) this.conRojo = '';
+                            else this.conRojo = 'Amarillo';
+
+                            this.rconectado = data.status; 
+                        }
+                        else if (data.color == 'Verde'){ 
+                            if (data.conexion == 0) this.conVerde = 'Gris';
+                            else if (data.conexion == 3) this.conVerde = '';
+                            else this.conVerde = 'Amarillo';
+                            
+                            this.vconectado = data.status; 
+                        }
+                        else if (data.color == 'Azul'){ 
+                            if (data.conexion == 0) this.conAzul = 'Gris';
+                            else if (data.conexion == 3) this.conAzul = '';
+                            else this.conAzul = 'Amarillo';
+                            
+                            this.aconectado = data.status; 
+                        }
                     }, false);
 
                     es.addEventListener('error', event => {

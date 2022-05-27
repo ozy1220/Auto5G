@@ -1,6 +1,29 @@
 import asyncio
 import math
+import time
 from coord import coordenadas
+
+DIR_PARA = 'V'
+DIR_F = 'N'
+DIR_B = 'S'
+DIR_R = 'E'
+DIR_L = 'O'
+DIR_FL = 'W'
+DIR_BL = 'X'
+DIR_BR = 'Y'
+DIR_FR = 'Z'
+
+SIN_CONEXION = 0
+CONECTADO_MOTORES = 1
+CONECTADO_POSICION = 2
+CONECTADO_LISTO = 3
+
+NORTE = 0
+ESTE = 1
+SUR = 2
+OESTE = 3
+LIMBO = 4
+
 
 class Carro:
     def __init__(self):
@@ -16,7 +39,54 @@ class Carro:
         self.x = 0
         self.y = 0
         self.angulo = 0
+        self.ts_posicion = 0
         self.queue = asyncio.Queue()
+
+        self.prohibidos = {
+            'N': False,
+            'S': False,
+            'E': False,
+            'O': False,
+            'W': False,
+            'X': False,
+            'Y': False,
+            'Z': False,
+            'V': False
+        }
+        
+        self.mov_frente = 0
+
+        self.seccion_f = -1
+        self.seccion_a = -1
+        self.sentido = LIMBO
+        self.calle = 0
+        self.ts_motores = 0
+        self.ts_posicion = 0
+        self.estatus_conexion = SIN_CONEXION
+
+vel = {
+    'vh': '200',
+    'vl': '100',
+    'vn': '150',
+    'v1': '050',
+    'v2': '100',
+    'v3': '150',
+    'v4': '200',
+    'v5': '250' 
+}
+
+TIEMPO_MAX_OVERRIDE = 1.5
+TIEMPO_MAX_SIN_MOTORES = 3000
+TIEMPO_MAX_SIN_POSICION = 3000
+
+BAN_HORIZONTAL = 8
+BAN_VERTICAL = 128
+BAN_SECCION = 1024
+BAN_ENTRADA_SUR = 2048
+BAN_ENTRADA_MEDIA = 4096
+
+y_calle = [12, 31, 49, 71, 90, 110]
+secciones_prohibidas = [-1, 12, 13, 14, 17, 18, 19, 52, 53, 54, 57, 58, 59]
 
 carros = {
     'Azul': Carro(),
@@ -24,174 +94,158 @@ carros = {
     'Rojo': Carro()
 }
 
-"""    'Azul':{
-        'frente': -1,
-        'atras': -1,
-        'dire': 'V',
-        'overrides': 0,
-        'ocupado': 'false',
-        'llave' : '123456',
-        'queue': asyncio.Queue(),
-        'x': -1,
-        'y': -1,
-        'angulo': 0
-    },
-    'Verde':{
-        'frente': -1,
-        'atras': -1,
-        'dire': 'V',
-        'overrides': 0,
-        'ocupado': 'false',
-        'llave' : '123456',
-        'queue': asyncio.Queue(),
-        'x': -1,
-        'y': -1,
-        'angulo': 0
-    },
-    'Rojo':{
-        'frente': -1,
-        'atras': -1,
-        'dire': 'V',
-        'overrides': 0,
-        'ocupado': 'false',
-        'llave' : '123456',
-        'queue': asyncio.Queue(),
-        'x': -1,
-        'y': -1,
-        'angulo': 0
-    }
-}
-"""
 
-# Triangulo en los lectores del coche
-tc_ca = 10.7
-tc_co = 2.1
-tc_h = 10.9
-tc_ang = 0.1929193140080
-tc_inc_ang = math.pi / 6
+def validaEstadoCarro(carro):
+    ahora = time.time()
+    trans_motores = ahora - carros[carro].ts_motores
+    trans_posicion = ahora - carros[carro].ts_posicion
 
-def posLector(etiqueta, centro_x, centro_y, angulo, direccion, es_frontal):
-    lx = coordenadas[etiqueta]['x']
-    ly = coordenadas[etiqueta]['y']
+    res = SIN_CONEXION
+    if trans_motores <= TIEMPO_MAX_SIN_MOTORES: res += CONECTADO_MOTORES
+    if trans_posicion <= TIEMPO_MAX_SIN_POSICION: res += CONECTADO_POSICION
 
-    # Calcula el centro del coche basado en la lectura y la pendiente previa
+    return res
 
-    # Si la direccion es norte o sur, el angulo no cambia
-    if direccion == 'N' or direccion == 'S':
-        # Suma el angulo que traia con el del lector contra el centro
-        ang_real = angulo + tc_ang
-        dx = tc_h * math.acos(ang_real)
-        dy = tc_h * math.asin(ang_real)
-        if es_frontal: return lx - dx, ly - dy, angulo
-        else: return lx + dx, ly + dy, angulo
+def heartbeatMotores(carro):
+    ahora = time.time()
+    carros[carro].ts_motores = ahora
 
-    # Si la direccion es este u oeste, asume que el centro anterior no cambia y mas bien hubo un cambio de angulo
-    elif direccion == 'E' or direccion == 'O':
-        dy = ly - centro_y
-        dx = lx - centro_x
-        if dx == 0:
-            if es_frontal and dy >= 0: ang_real = math.pi / 2
-            elif es_frontal: ang_real = math.pi * 3 / 2
-            elif not es_frontal and dy >= 0: ang_real = math.pi * 3 / 2
-            else: ang_real = math.pi / 2
-            ang_real -= tc_ang
+
+def heartbeatPosicion(carro):
+    ahora = time.time()
+    carros[carro].ts_posicion = ahora
+
+
+def prohibeMovimientos(carro, previaf, actualf, previaa, actuala):
+    pf = previaf in secciones_prohibidas
+    af = actualf in secciones_prohibidas
+    pa = previaa in secciones_prohibidas
+    aa = actuala in secciones_prohibidas
+
+    res = False
+
+    print(f'previaf = {previaf}, pf = {pf}')
+    print(f'actualf = {actualf}, pf = {af}')
+    print(f'previaa = {previaa}, pf = {pa}')
+    print(f'actuala = {actuala}, pf = {aa}')
+
+    if carros[carro].sentido == LIMBO:
+        carros[carro].prohibidos[DIR_F] = False
+        carros[carro].prohibidos[DIR_FL] = False
+        carros[carro].prohibidos[DIR_FR] = False
+        carros[carro].prohibidos[DIR_B] = False
+        carros[carro].prohibidos[DIR_BL] = False
+        carros[carro].prohibidos[DIR_BR] = False
+    elif af:
+        carros[carro].prohibidos[DIR_F] = True
+        carros[carro].prohibidos[DIR_FL] = True
+        carros[carro].prohibidos[DIR_FR] = True
+        if carros[carro].dire == DIR_F or carros[carro].dire == DIR_FL or carros[carro].dire == DIR_FR: res = True
+    elif pf and not af:
+        carros[carro].prohibidos[DIR_F] = False
+        carros[carro].prohibidos[DIR_FL] = False
+        carros[carro].prohibidos[DIR_FR] = False
+
+    if aa:
+        carros[carro].prohibidos[DIR_B] = True
+        carros[carro].prohibidos[DIR_BL] = True
+        carros[carro].prohibidos[DIR_BR] = True
+        if carros[carro].dire == DIR_B or carros[carro].dire == DIR_BL or carros[carro].dire == DIR_BR: res = True
+    elif pa and not aa:
+        carros[carro].prohibidos[DIR_B] = False
+        carros[carro].prohibidos[DIR_BL] = False
+        carros[carro].prohibidos[DIR_BR] = False
+    
+    return res
+
+
+
+def calculaSeccion(carro, front, back):
+    dir_carro = carros[carro].sentido
+    ban_front = coordenadas[front]['banderas']
+    ban_back = coordenadas[back]['banderas']
+    previa_f = carros[carro].seccion_f
+    previa_a = carros[carro].seccion_a
+
+    # Dirección LIMBO
+    if dir_carro == LIMBO:
+        # El carro solo sale del limbo si el frente pasa por alguna entrada
+        if (ban_front & BAN_ENTRADA_SUR) == BAN_ENTRADA_SUR:
+            carros[carro].seccion_f = 10
+            carros[carro].seccion_a = -1
+            carros[carro].calle = 0
+            carros[carro].sentido = OESTE
+
+        elif (ban_front & BAN_ENTRADA_MEDIA) == BAN_ENTRADA_MEDIA:
+            carros[carro].seccion_f = 40
+            carros[carro].seccion_a = -1
+            carros[carro].calle = 2
+            carros[carro].sentido = OESTE
+    
+    else:
+        # Checa a que seccion pasa
+        if front != str(0) and carros[carro].frente != front:
+            if (ban_front & BAN_HORIZONTAL) == BAN_HORIZONTAL:
+                a = coordenadas[front]['norte']
+                b = coordenadas[front]['sur']
+                if carros[carro].seccion_f == a: carros[carro].seccion_f = b
+                else: carros[carro].seccion_f = a
+            else:
+                a = coordenadas[front]['este']
+                b = coordenadas[front]['oeste']
+                if carros[carro].seccion_f == a: carros[carro].seccion_f = b
+                else: carros[carro].seccion_f = a
+
+        if back != str(0) and carros[carro].atras != back:
+            if (ban_back & BAN_HORIZONTAL) == BAN_HORIZONTAL:
+                a = coordenadas[back]['norte']
+                b = coordenadas[back]['sur']
+                if carros[carro].seccion_a == a: carros[carro].seccion_a = b
+                else: carros[carro].seccion_a = a
+            else:
+                a = coordenadas[back]['este']
+                b = coordenadas[back]['oeste']
+                if carros[carro].seccion_a == a: carros[carro].seccion_a = b
+                else: carros[carro].seccion_a = a
+
+    carros[carro].frente = front
+    carros[carro].atras = back
+
+    seccion_f = carros[carro].seccion_f
+    seccion_a = carros[carro].seccion_a
+
+    prohibe = prohibeMovimientos(carro, previa_f, seccion_f, previa_a, seccion_a)
+
+    if carros[carro].sentido == NORTE:
+        angulo = math.pi / 2
+    elif carros[carro].sentido == OESTE:
+        angulo = math.pi
+        if carros[carro].seccion_f == carros[carro].seccion_a:
+            posx = ((carros[carro].seccion_f - 1) % 10) * 20 + 16
         else:
-            ang_real = math.atan(dy / dx)
-            if not es_frontal: 
-                ang_real += 2 * math.pi
-                if ang_real > 2 * math.pi: ang_real -= 2 * math.pi
-            ang_real -= tc_ang
-        
-        return centro_x, centro_y, ang_real
-
-    # Si la direccion es NO, NE, SO o SE, debe asumir cambio de centro y cambio de angulo
+            posx = ((carros[carro].seccion_f - 1) % 10) * 20 + 26
+        posy = y_calle[int((seccion_f - 1) / 10)]
+    elif carros[carro].sentido == SUR:
+        angulo = math.pi * 1.5
     else:
-        # Haz lo mismo que si avanza recto y asume un cambio de angulo
-        if direccion == 'NE' or direccion == 'SO': delta_ang = -tc_inc_ang
-        else: delta_ang = tc_inc_ang
+        angulo = 0
+        if carros[carro].seccion_f == carros[carro].seccion_a:
+            posx = ((carros[carro].seccion_f - 1) % 10) * 20 + 16
+        else:
+            posx = ((carros[carro].seccion_f - 1) % 10) * 20 + 6
+        posy = y_calle[int((seccion_f - 1) / 10)]
 
-        ang_real = angulo + tc_ang + delta_ang
-        print(ang_real)
-        dx = tc_h * math.acos(ang_real)
-        dy = tc_h * math.asin(ang_real)
-        if es_frontal: return lx - dx, ly - dy, angulo
-        else: return lx + dx, ly + dy, angulo
-
-
-def promediaLectores(etiqueta_frente, etiqueta_atras):
-    if etiqueta_frente == 0: etiqueta_frente = etiqueta_atras
-    elif etiqueta_atras == 0: etiqueta_atras = etiqueta_frente
-
-    fx = coordenadas[etiqueta_frente]['x']
-    fy = coordenadas[etiqueta_frente]['y']
-    ax = coordenadas[etiqueta_atras]['x']
-    ay = coordenadas[etiqueta_atras]['y']
-    dy = fy - ay
-    dx = fx - ax
-    if dx == 0:
-        if dy >= 0: ang_real = math.pi / 2
-        else: ang_real = math.pi * 3 / 2
-    else:
-        ang_real = math.atan2(dy, dx)
-    ang_real -= tc_ang
-    cx = (fx + ax) / 2
-    cy = (fy + ay) / 2
-    return cx, cy, ang_real
-
-
-def estimaNuevaPosicion(carro, front, back):
-    # Toma en cuenta solo el lector que haya cambiado
-    frente_previo = carros[carro]['frente']
-    atras_previo = carros[carro]['atras']
-    angulo_previo = carros[carro]['angulo']
-    dir_actual = carros[carro]['dire']
-    centro_x = carros[carro]['x']
-    centro_y = carros[carro]['y']
-    if frente_previo != front and atras_previo != back:
-        posx, posy, angulo = promediaLectores(front, back)
-        # actualiza
-        carros[carro]['frente'] = front
-        carros[carro]['atras'] = back
-
-    #elif frente_previo != front:
-        #posx, posy, angulo = posLector(front, centro_x, centro_y, angulo_previo, dir_actual, True)
-        #carros[carro]['frente'] = front
-
-    #elif atras_previo != back:
-        #posx, posy, angulo = posLector(back, centro_x, centro_y, angulo_previo, dir_actual, False)
-        #carros[carro]['atras'] = back
-
-    else: 
-        posx, posy, angulo = promediaLectores(front, back)
-        # actualiza
-        carros[carro]['frente'] = front
-        carros[carro]['atras'] = back
-        #posx = centro_x
-        #posy = centro_y
-        #angulo = angulo_previo
-
-    # Actualiza las posiciones
-    carros[carro]['x'] = posx
-    carros[carro]['y'] = posy
-    carros[carro]['angulo'] = angulo
-
-    return posx, posy, angulo
+    return posx, posy, angulo, prohibe
 
 
 def overrideDireccion(carro, direccion):
-    px = carros[carro]['x']
-    py = carros[carro]['y']
-    ang = carros[carro]['angulo']
+    print(direccion)
+    print(carros[carro].prohibidos[direccion])
+    if carros[carro].prohibidos[direccion]:
+        res = DIR_PARA
 
-    # Determina en la calle en la que va, las calles son:
-    # [0 - 3]: Horizontal de sur a norte
-    # [4 - 7]: Vertical de oeste a este
+    else:
+        res = direccion
 
-
-    if direccion == 'N':
-        if ang > 10 or py > 14: res = 'E'
-        elif carros[carro]['angulo'] < -10 or py < 9: res = 'O'
-        else: res = 'N'
-    else: res = direccion
-    print(f'Se recibio direccion {direccion}, se envia {res}, angulo = {ang}, py = {py}')
+    print(f'Se recibio direccion {direccion}, se envia {res}')
     return res
