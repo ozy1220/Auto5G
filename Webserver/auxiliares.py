@@ -13,6 +13,8 @@ DIR_BL = 'X'
 DIR_BR = 'Y'
 DIR_FR = 'Z'
 
+direcciones = [DIR_PARA, DIR_F, DIR_B, DIR_R, DIR_L, DIR_FL, DIR_BL, DIR_BR, DIR_FR]
+
 SIN_CONEXION = 0
 CONECTADO_MOTORES = 1
 CONECTADO_POSICION = 2
@@ -40,7 +42,7 @@ class Carro:
         self.y = 0
         self.angulo = 0
         self.ts_posicion = 0
-        self.queue = asyncio.Queue()
+        self.queue = asyncio.Queue(maxsize=4)
 
         self.prohibidos = {
             'N': False,
@@ -85,7 +87,7 @@ BAN_SECCION = 1024
 BAN_ENTRADA_SUR = 2048
 BAN_ENTRADA_MEDIA = 4096
 
-y_calle = [12, 31, 49, 71, 90, 110]
+y_calle = [12, 31, 49, 60, 71, 90, 110]
 secciones_prohibidas = [-1, 12, 13, 14, 17, 18, 19, 52, 53, 54, 57, 58, 59]
 
 carros = {
@@ -93,6 +95,11 @@ carros = {
     'Verde': Carro(),
     'Rojo': Carro()
 }
+
+
+def eliminaProhibidos(carro):
+    for direccion in direcciones:
+        carros[carro].prohibidos[direccion] = False
 
 
 def validaEstadoCarro(carro):
@@ -128,14 +135,10 @@ def prohibeMovimientos(carro, previaf, actualf, previaa, actuala):
     print(f'actualf = {actualf}, pf = {af}')
     print(f'previaa = {previaa}, pf = {pa}')
     print(f'actuala = {actuala}, pf = {aa}')
+    print(f'Sentido coche = {carros[carro].sentido}, direccion actual = {carros[carro].dire}')
 
     if carros[carro].sentido == LIMBO:
-        carros[carro].prohibidos[DIR_F] = False
-        carros[carro].prohibidos[DIR_FL] = False
-        carros[carro].prohibidos[DIR_FR] = False
-        carros[carro].prohibidos[DIR_B] = False
-        carros[carro].prohibidos[DIR_BL] = False
-        carros[carro].prohibidos[DIR_BR] = False
+        eliminaProhibidos(carro)
     elif af:
         carros[carro].prohibidos[DIR_F] = True
         carros[carro].prohibidos[DIR_FL] = True

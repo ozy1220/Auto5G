@@ -19,19 +19,20 @@ MFRC522 Back(SS_PIN_2, R_PIN_2);
 
 //WIFI
 const char* WIFI_SSID = "EcoCharlyBravo";
-const char* WIFI_PASSWORD = "6322167445Eco87";  
+const char* WIFI_PASSWORD = "6322167445Eco87";
+const char* IP_SERVER = "10.70.1.19";  
 WiFiClient wf;
 
 //lector de rfid
-unsigned int posb,posf,trash;
+unsigned int posb,posf,trash,parb,parf;
 int blockNum = 5;
 byte bufferLen = 18;
 byte readBlockData[20];
 MFRC522::StatusCode status;
 
 //color de carro
-String color = "Azul";   
-bool llama;
+String color = "Rojo";   
+bool llama,repe;
 
 bool ReadBack(int blockNum, byte *readBlockData) 
 {
@@ -76,8 +77,8 @@ void postEnWeb() {
   String link = "/posicion/" + color + '/' + posf + '/' + posb ;
   Serial.println(link);
 
-  wf.connect("10.70.1.19", 8080);
-  http.begin(wf, "10.70.1.19", 8080, link);     //Specify request destination
+  wf.connect(IP_SERVER, 8080);
+  http.begin(wf, IP_SERVER, 8080, link);     //Specify request destination
   
   int code = http.GET();
   Serial.println(code);
@@ -142,22 +143,32 @@ void loop() {
         }
                      
       }      
-	}	
+	}
 
 	// Revisamos si hay nuevas tarjetas  presentes
+  trash = posf;
 	if (Front.PICC_IsNewCardPresent()) {  
   	//Seleccionamos una tarjeta
-         if ( Front.PICC_ReadCardSerial()) {  
-               if (ReadFront(blockNum, readBlockData)) {
-                trash = *((unsigned int*) readBlockData);          
-                if (trash != posf) {
-                  posf = trash;     
-                  llama = true;
-                }  
-              }     
-         }      
-	}	
+    if ( Front.PICC_ReadCardSerial()) {  
+      if (ReadFront(blockNum, readBlockData)) {
+        trash = *((unsigned int*) readBlockData);
+        parf = 0;          
+      }     
+    }     
+	}
+  else {
+    if (!parf) parf = 1;
+    else if (parf == 1) {
+      parf = 2;
+      trash = 0;
+    }
+  }	
 
+  if (posf != trash){
+    posf = trash;
+    llama = true;
+  }
 
+  
   if (llama) postEnWeb();
 }

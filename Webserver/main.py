@@ -9,12 +9,14 @@ import aiofiles
 import datetime
 import uuid
 import random
+import time
 from starlette.responses import RedirectResponse
 from coord import coordenadas
 import auxiliares
 from auxiliares import SIN_CONEXION, carros
 import math
 import timeit
+import logging
 
 
 
@@ -26,7 +28,7 @@ app = FastAPI()
 #del 0-2 van a ser los sensores de el frente
 #del 3-5 van a ser los sensores traseros
 
-qPosiciones = asyncio.Queue()
+qPosiciones = asyncio.Queue(maxsize = 5000)
 
 # ---------- Termina codigo para SSE
 STREAM_DELAY = 1  # second
@@ -143,12 +145,12 @@ async def _avanza(carro):
 
     try:
 
-        res = await asyncio.wait_for(auxiliares.carros[carro].queue.get(), timeout = 50.0)
+        res = await asyncio.wait_for(auxiliares.carros[carro].queue.get(), timeout = 10.0)
         auxiliares.carros[carro].dire = res
         auxiliares.carros[carro].queue.task_done()
         
         dir_nueva = auxiliares.overrideDireccion(carro, res)
-        print(f'Res /avanzaMotores/{carro} :  res = {res}, dir_final = {dir_nueva}')
+        logging.warning(f'{time.time()} Res /avanzaMotores/{carro} :  res = {res}, dir_final = {dir_nueva}')
         return str(dir_nueva) 
 
     except asyncio.TimeoutError:
@@ -175,6 +177,7 @@ async def _carrito(carro):
     carros[carro].seccion_f = -1
     carros[carro].seccion_a = -1
     carros[carro].sentido = auxiliares.LIMBO
+    auxiliares.eliminaProhibidos(carro)
 
     async with aiofiles.open("./archivosHTML/control.html", mode="r") as f:
         html = await f.read()
@@ -202,11 +205,15 @@ async def _desconecta(carro, status_code = 200):
 async def direccion(response: Response, param_dir, carro, hash):
     response.headers["access-control-allow-origin"] = "*"
 
-    if (hash != 'admin' and hash != auxiliares.carros[carro].llave): return "Error(no eres quien lo controla)"
-
-    auxiliares.carros[carro].queue.put_nowait(param_dir)
-    return 'OK'
-
+    if (hash != 'admin' and hash != auxiliares.carros[carro].llave): 
+        return "Error(no eres quien lo controla)"
+    else:
+        if not auxiliares.carros[carro].queue.full():
+            auxiliares.carros[carro].queue.put_nowait(param_dir)
+            print(f'{time.time()} Enviando a cola de carro {carro} direccion {param_dir}')
+            return 'OK'
+        else:
+            logging.warning(f'La cola de instrucciones del carro {carro} esta llena')
 
 @app.get("/img/{archivo}", response_class=FileResponse)
 async def _sirvearchivo(archivo):
@@ -215,11 +222,21 @@ async def _sirvearchivo(archivo):
 
 @app.get("/posicion/{carro}/{front}/{back}")
 async def _posicion(carro,front,back):
+    # logging
+    logging.warning(f'{time.time()} - /posicion/{carro}/{front}/{back}')
+
+    posx, posy, angulo, prohibe = auxiliares.calculaSeccion(carro, front, back)
+    logging.warning(f'{time.time()} - prohibe = {prohibe}, seccionf = {carros[carro].seccion_f}, secciona = {carros[carro].seccion_a}')
+    if prohibe:
+        if not auxiliares.carros[carro].queue.full:
+            auxiliares.carros[carro].queue.put_nowait(auxiliares.DIR_PARA)
+        else:
+            logging.error(f'Se intento forzar detencion en carro {carro} pero su cola de instrucciones esta llena')
+
     # seccion de heartbeats
     auxiliares.heartbeatPosicion(carro)
     validaCarros()
- 
-    posx, posy, angulo, prohibe = auxiliares.calculaSeccion(carro, front, back)
+
     qobj = {
         'tipo': 'message',
         'carro': carro,
@@ -231,11 +248,6 @@ async def _posicion(carro,front,back):
     }
     qPosiciones.put_nowait(qobj)
 
-    print(prohibe)
-    if prohibe:
-        auxiliares.carros[carro].queue.put_nowait(auxiliares.DIR_PARA)
-
-
     return "acabe"
 
 
@@ -246,4 +258,5 @@ async def velocidad(carro):
 
 
 if __name__ == '__main__':
+    logging.basicConfig(filename = "logfile.log", level = logging.WARNING)
     uvicorn.run(app, host='0.0.0.0', port='8080')
