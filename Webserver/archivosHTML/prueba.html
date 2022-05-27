@@ -11,7 +11,7 @@
 
 <script>
 $(function(){
-   /* window.requestAnimFrame = (function(){
+   window.requestAnimFrame = (function(){
       return  window.requestAnimationFrame       ||
               window.webkitRequestAnimationFrame ||
               window.mozRequestAnimationFrame    ||
@@ -21,7 +21,7 @@ $(function(){
                 window.setTimeout(callback, 1000 / 60);
               };
     })();
-*/
+
     var canvas = document.getElementById("canvas"),
         cx = canvas.getContext("2d");
 

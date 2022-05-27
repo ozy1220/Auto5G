@@ -9,9 +9,16 @@ import aiofiles
 import datetime
 import uuid
 import random
+import time
 from starlette.responses import RedirectResponse
 from coord import coordenadas
+import auxiliares
+from auxiliares import SIN_CONEXION, carros
 import math
+import timeit
+import logging
+
+
 
 # -------- Inicia codigo para SSE
 from sse_starlette.sse import EventSourceResponse
@@ -20,37 +27,38 @@ from sse_starlette.sse import EventSourceResponse
 app = FastAPI()
 #del 0-2 van a ser los sensores de el frente
 #del 3-5 van a ser los sensores traseros
-carros = {
-    'Azul':{
-        'frente': -1,
-        'atras': -1,
-        'dire': 'V',
-        'ocupado': 'false',
-        'llave' : '123456',
-        'queue': asyncio.Queue()
-    },
-    'Verde':{
-        'frente': -1,
-        'atras': -1,
-        'dire': 'V',
-        'ocupado': 'false',
-        'llave' : '123456',
-        'queue': asyncio.Queue()
-    },
-    'Rojo':{
-        'frente': -1,
-        'atras': -1,
-        'dire': 'V',
-        'ocupado': 'false',
-        'llave' : '123456',
-        'queue': asyncio.Queue()
-    }
-}
-qPosiciones = asyncio.Queue()
 
-# ---------- Inicio codigo para SSE
+qPosiciones = asyncio.Queue(maxsize = 5000)
+
+# ---------- Termina codigo para SSE
 STREAM_DELAY = 1  # second
 RETRY_TIMEOUT = 15000  # milisecond
+
+
+# ------------  AUXILIARES
+
+def actualizaEstadoCarro(carro):
+    estado = auxiliares.validaEstadoCarro(carro)
+    if estado != auxiliares.carros[carro].estatus_conexion:
+        # Genera estado conexion
+        auxiliares.carros[carro].estatus_conexion = estado
+        qobj = {
+            'tipo': 'connect',
+            'carro': carro,
+            'status': carros[carro].ocupado,
+            'conexion': estado
+        }
+        qPosiciones.put_nowait(qobj)
+
+
+def validaCarros():
+    actualizaEstadoCarro('Rojo')
+    actualizaEstadoCarro('Verde')
+    actualizaEstadoCarro('Azul')
+
+# ------------  FIN AUXILIARES
+
+
 
 @app.get('/stream')
 async def message_stream(request: Request):
@@ -64,15 +72,10 @@ async def message_stream(request: Request):
             try:
                 qobj = await asyncio.wait_for(qPosiciones.get(), 300)
             except:
-                qobj = {
-                    'tipo': 'message',
-                    'carro': 'Rojo',
-                    'front': 1,
-                    'back': 100,
-                    'coordx':0,
-                    'coordy':0,
-                    'rad':0
-                }
+                # Si no hubo eventos, no mandes nada.
+                continue
+
+            print(qobj)
             color = qobj['carro']
             tipo = qobj['tipo']
 
@@ -85,7 +88,8 @@ async def message_stream(request: Request):
                 datastr = '{"color": "' + color + '", "front": ' + str(front) + ', "back": ' + str(back) + ', "coordx": ' + str(coordx) +', "coordy": ' + str(coordy) +', "rad": ' + str(rad) + '}'
             elif tipo == 'connect':
                 status = qobj['status']
-                datastr = '{"color": "' + color + '", "status": ' + status + '}'
+                conexion = qobj['conexion']
+                datastr = '{"color": "' + color + '", "status": ' + status + ', "conexion": ' + str(conexion) + '}'
             
             eobj = {
                     'event': tipo,
@@ -104,19 +108,19 @@ async def message_stream(request: Request):
 @app.get("/", response_class=HTMLResponse)
 async def root():
 
-    if carros['Rojo']['ocupado'] == 'true': linkRojo = '#'
+    if carros['Rojo'].ocupado == 'true': linkRojo = '#'
     else: linkRojo = '/control/Rojo'
-    if carros['Azul']['ocupado'] == 'true': linkAzul = '#'
+    if carros['Azul'].ocupado == 'true': linkAzul = '#'
     else: linkAzul = '/control/Azul'
-    if carros['Verde']['ocupado'] == 'true': linkVerde = '#'
+    if carros['Verde'].ocupado == 'true': linkVerde = '#'
     else: linkVerde = '/control/Verde'
 
     async with aiofiles.open("./archivosHTML/inicio.html", mode="r") as f:
         html = await f.read()
 
-    html = html.format(ocupadoRojo = carros['Rojo']['ocupado'], 
-                       ocupadoAzul = carros['Azul']['ocupado'],
-                       ocupadoVerde = carros['Verde']['ocupado'],
+    html = html.format(ocupadoRojo = carros['Rojo'].ocupado, 
+                       ocupadoAzul = carros['Azul'].ocupado,
+                       ocupadoVerde = carros['Verde'].ocupado,
                        linkRojo = linkRojo,
                        linkAzul = linkAzul,
                        linkVerde = linkVerde)
@@ -134,30 +138,46 @@ async def pagAdmin():
 
 @app.get("/avanzaMotores/{carro}")
 async def _avanza(carro):
+
+    # seccion de heartbeats
+    auxiliares.heartbeatMotores(carro)
+    validaCarros()
+
     try:
-        res = await asyncio.wait_for(carros[carro]['queue'].get(), timeout = 20.0)
-        carros[carro]['queue'].task_done()
-        carros[carro]['dire'] = res
-        return str(res)
+
+        res = await asyncio.wait_for(auxiliares.carros[carro].queue.get(), timeout = 10.0)
+        auxiliares.carros[carro].dire = res
+        auxiliares.carros[carro].queue.task_done()
+        
+        dir_nueva = auxiliares.overrideDireccion(carro, res)
+        logging.warning(f'{time.time()} Res /avanzaMotores/{carro} :  res = {res}, dir_final = {dir_nueva}')
+        return str(dir_nueva) 
+
     except asyncio.TimeoutError:
-        carros[carro]['dire'] = 'V'
+        auxiliares.carros[carro].dire = 'V'
         return str('V')
 
 
 @app.get("/control/{carro}", response_class=HTMLResponse)
 async def _carrito(carro):
     x = str(uuid.uuid4())
-    carros[carro]['llave'] = x
-    carros[carro]['ocupado'] = 'true'
+    carros[carro].llave = x
+    carros[carro].ocupado = 'true'
     qobj = {
         'tipo': 'connect',
         'carro': carro,
-        'status': 'true'
+        'status': 'true',
+        'conexion': carros[carro].estatus_conexion
     }
     qPosiciones.put_nowait(qobj)
-    while not carros[carro]['queue'].empty(): 
-        carros[carro]['queue'].get_nowait()
-        carros[carro]['queue'].task_done()
+    while not carros[carro].queue.empty(): 
+        carros[carro].queue.get_nowait()
+        carros[carro].queue.task_done()
+
+    carros[carro].seccion_f = -1
+    carros[carro].seccion_a = -1
+    carros[carro].sentido = auxiliares.LIMBO
+    auxiliares.eliminaProhibidos(carro)
 
     async with aiofiles.open("./archivosHTML/control.html", mode="r") as f:
         html = await f.read()
@@ -168,12 +188,13 @@ async def _carrito(carro):
 
 @app.get("/desconecta/{carro}")
 async def _desconecta(carro, status_code = 200):
-    carros[carro]['ocupado'] = 'false'
-    carros[carro]['llave'] = str(uuid.uuid4())
+    carros[carro].ocupado = 'false'
+    carros[carro].llave = str(uuid.uuid4())
     qobj = {
         'tipo': 'connect',
         'carro': carro,
-        'status': 'false'
+        'status': 'false',
+        'conexion': carros[carro].estatus_conexion
     }
     qPosiciones.put_nowait(qobj)
     
@@ -184,10 +205,15 @@ async def _desconecta(carro, status_code = 200):
 async def direccion(response: Response, param_dir, carro, hash):
     response.headers["access-control-allow-origin"] = "*"
 
-    if (hash != carros[carro]['llave']): return "Error(no eres quien lo controla)"
-
-    carros[carro]['queue'].put_nowait(param_dir)
-    return 'OK'
+    if (hash != 'admin' and hash != auxiliares.carros[carro].llave): 
+        return "Error(no eres quien lo controla)"
+    else:
+        if not auxiliares.carros[carro].queue.full():
+            auxiliares.carros[carro].queue.put_nowait(param_dir)
+            print(f'{time.time()} Enviando a cola de carro {carro} direccion {param_dir}')
+            return 'OK'
+        else:
+            logging.warning(f'La cola de instrucciones del carro {carro} esta llena')
 
 @app.get("/img/{archivo}", response_class=FileResponse)
 async def _sirvearchivo(archivo):
@@ -196,51 +222,41 @@ async def _sirvearchivo(archivo):
 
 @app.get("/posicion/{carro}/{front}/{back}")
 async def _posicion(carro,front,back):
- 
-    if (carros[carro]['frente'] != front and carros[carro]['atras'] != back):
-        dx = coordenadas[front]['x']-coordenadas[back]['x']
-        dy = coordenadas[front]['y']-coordenadas[back]['y']
-        px = coordenadas[front]['x']*5/1000
-        py = coordenadas[front]['y']*5/1000
-    elif carros[carro]['frente'] != front:
-        dx = coordenadas[front]['x']-coordenadas[str(carros[carro]['frente'])]['x']
-        dy = coordenadas[front]['y']-coordenadas[str(carros[carro]['frente'])]['y']
-        px = coordenadas[front]['x']*5/1000
-        py = coordenadas[front]['y']*5/1000
-    else:
-        dx = coordenadas[str(carros[carro]['atras'])]['x'] - coordenadas[front]['x']
-        dy = coordenadas[str(carros[carro]['atras'])]['y'] - coordenadas[back]['y']
-        px = coordenadas[back]['x']*5/1000
-        py = coordenadas[back]['y']*5/1000
+    # logging
+    logging.warning(f'{time.time()} - /posicion/{carro}/{front}/{back}')
 
-    #falta encontrar el centro del carro siguendo la direccion
-    if dx == 0:
-        if (dy > 0): pend = 0
-        else: pend = 180
-    elif dy == 0:
-        if (dx > 0): pend = 270
-        else: pend = 90
-    else: 
-        pend = -dy/dx
-        pend = math.atan(pend)
-        if pend < math.pi/2: pend = (math.pi/2)-pend    
-        else: pend = (5*math.pi)/2 - pend
+    posx, posy, angulo, prohibe = auxiliares.calculaSeccion(carro, front, back)
+    logging.warning(f'{time.time()} - prohibe = {prohibe}, seccionf = {carros[carro].seccion_f}, secciona = {carros[carro].seccion_a}')
+    if prohibe:
+        if not auxiliares.carros[carro].queue.full:
+            auxiliares.carros[carro].queue.put_nowait(auxiliares.DIR_PARA)
+        else:
+            logging.error(f'Se intento forzar detencion en carro {carro} pero su cola de instrucciones esta llena')
 
-    carros[carro]['frente'] = front
-    carros[carro]['atras'] = back
+    # seccion de heartbeats
+    auxiliares.heartbeatPosicion(carro)
+    validaCarros()
+
     qobj = {
         'tipo': 'message',
         'carro': carro,
         'front': front,
         'back': back,
-        'coordx': px,
-        'coordy': py,
-        'rad': pend
+        'coordx': posx,
+        'coordy': posy,
+        'rad': angulo
     }
     qPosiciones.put_nowait(qobj)
-    
+
     return "acabe"
 
 
+@app.get("/velocidad/{carro}")
+async def velocidad(carro):
+    st = auxiliares.vel['vh'] + auxiliares.vel['vl'] + auxiliares.vel['vn']
+    return st
+
+
 if __name__ == '__main__':
+    logging.basicConfig(filename = "logfile.log", level = logging.WARNING)
     uvicorn.run(app, host='0.0.0.0', port='8080')
