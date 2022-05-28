@@ -44,6 +44,10 @@ class Carro:
         self.ts_posicion = 0
         self.queue = asyncio.Queue(maxsize=4)
 
+        self.ipPosiciones = ""
+        self.ipMotores = ""
+        self.uuidEnlace = ""
+
         self.prohibidos = {
             'N': False,
             'S': False,

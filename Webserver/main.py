@@ -158,6 +158,12 @@ async def _avanza(carro):
         return str('V')
 
 
+@app.get("/confirmaEnlace/{carro}")
+async def _confirmaEnlace(carro):
+    logging.warning(f'Se confirma enlace de carro {carro}')
+    return "OK"
+    
+
 @app.get("/control/{carro}", response_class=HTMLResponse)
 async def _carrito(carro):
     x = str(uuid.uuid4())
@@ -249,6 +255,18 @@ async def _posicion(carro,front,back):
     qPosiciones.put_nowait(qobj)
 
     return "acabe"
+
+@app.get("/registraArduino/{carro}/{tipo}")
+async def registraArduino(carro, tipo, request: Request):
+    if tipo == "posicion":
+        carros[carro].ipPosiciones = request.client.host
+        if carros[carro].ipMotores != "":
+            return carros[carro].ipMotores
+        else:
+            return "F"
+    elif tipo == "motores":
+        carros[carro].ipMotores = request.client.host
+        return "OK"
 
 
 @app.get("/velocidad/{carro}")

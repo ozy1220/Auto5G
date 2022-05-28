@@ -4,6 +4,7 @@
 
 //WIFI
 #include <ESP8266Wifi.h>
+#include <ESPAsyncTCP.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
 
@@ -21,7 +22,11 @@ MFRC522 Back(SS_PIN_2, R_PIN_2);
 const char* WIFI_SSID = "EcoCharlyBravo";
 const char* WIFI_PASSWORD = "6322167445Eco87";
 const char* IP_SERVER = "10.70.1.19";  
+const char* ATCP_SERVER = "10.70.1.208";
+uint16_t ATCP_PORT = 8888;
 WiFiClient wf;
+
+AsyncClient* client;
 
 //lector de rfid
 unsigned int posb,posf,trash,parb,parf;
@@ -31,7 +36,7 @@ byte readBlockData[20];
 MFRC522::StatusCode status;
 
 //color de carro
-String color = "Rojo";   
+String color = "Azul";   
 bool llama,repe;
 
 bool ReadBack(int blockNum, byte *readBlockData) 
@@ -92,6 +97,8 @@ bool connectWifi()
     return true;
   }
 
+  Serial.println(WIFI_SSID);
+  Serial.println(WIFI_PASSWORD);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   int maxRetries = 40;
   while (WiFi.status() != WL_CONNECTED)
@@ -106,12 +113,26 @@ bool connectWifi()
   }
   Serial.println("");
   Serial.println("WiFi connected");
+  Serial.println(WIFI_SSID);
+  Serial.println(WIFI_PASSWORD);
   Serial.println(WiFi.localIP());
 
   //wf.connect("10.70.1.19", 8080);
 
   return true;
 }
+
+
+static void handleData(void* arg, AsyncClient* client, void *data, size_t len) {
+	Serial.printf("\n data received from %s \n", client->remoteIP().toString().c_str());
+	Serial.write((uint8_t*)data, len);
+}
+
+void onConnect(void* arg, AsyncClient* client) {
+	Serial.printf("\n client has been connected to %s on port %d \n", ATCP_SERVER, ATCP_PORT);
+}
+
+
 
 void setup() {
 	Serial.begin(115200); //Iniciamos la comunicación  serial
@@ -124,6 +145,20 @@ void setup() {
   Serial.println(WIFI_SSID);
   if (connectWifi()) Serial.println("Estoy conectado");
   else Serial.println("Se intento y no se logro :'(");
+
+// connects to access point
+	WiFi.mode(WIFI_STA);
+	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+	while (WiFi.status() != WL_CONNECTED) {
+		Serial.print('.');
+		delay(500);
+	}
+
+  client = new AsyncClient;
+	client->onData(&handleData, client);
+	client->onConnect(&onConnect, client);
+	client->connect(ATCP_SERVER, ATCP_PORT);
+
 }
 
 void loop() {
@@ -170,5 +205,12 @@ void loop() {
   }
 
   
-  if (llama) postEnWeb();
+  if (llama){
+		char message[2];
+		message[0] = 'V';
+    message[1] = (char) 0;
+		client->add(message, strlen(message));
+		client->send();    
+    //postEnWeb();
+  }
 }
