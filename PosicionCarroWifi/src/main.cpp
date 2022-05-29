@@ -87,7 +87,7 @@ void postEnWeb() {
   int code = http.GET();
   Serial.println("Fin del get");
   if (code != 200) Serial.println(code);
-
+ //
   http.end();
 }
 

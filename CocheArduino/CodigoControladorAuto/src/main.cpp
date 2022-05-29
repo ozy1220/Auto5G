@@ -158,7 +158,7 @@ char obtenDeWeb() {
 
   String link = "/avanzaMotores/" + color;
 
-//  if (!wf.connected()){
+////  if (!wf.connected()){
 //    http.end();
     wf.connect(DIR_IP, 8080);    
     wf.disableKeepAlive();
