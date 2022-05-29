@@ -158,18 +158,22 @@ char obtenDeWeb() {
 
   String link = "/avanzaMotores/" + color;
 
-  if (!wf.connected()){
-    http.end();
+////  if (!wf.connected()){
+//    http.end();
     wf.connect(DIR_IP, 8080);    
-    http.setTimeout(15000);
+    wf.disableKeepAlive();
+    http.setTimeout(25000);
     http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
-  }
+//  }
 
   int code = http.GET();
   if (code != 200) Serial.println(code);
 
   String payload = http.getString();    //Get the response payload
-  return payload[1];
+  
+  http.end();
+
+  return payload[0];
 }
 
 void obtenVelocidades() {
@@ -188,9 +192,9 @@ void obtenVelocidades() {
   String payload = http.getString();    //Get the response payload
   Serial.println("Pidiendo velocidades: " + payload);
   if (payload.length() >= 9){
-    String strvh = payload.substring(1, 4);
-    String strvl = payload.substring(4, 7);
-    String strvn = payload.substring(7, 10);
+    String strvh = payload.substring(0, 3);
+    String strvl = payload.substring(3, 6);
+    String strvn = payload.substring(6, 9);
 
     vh = strvh.toInt();
     vl = strvl.toInt();
@@ -199,7 +203,7 @@ void obtenVelocidades() {
     Serial.println(vl);
     Serial.println(vn);
   }
-  http.end(); 
+  http.end();
 }
 
 void registraMotores() {

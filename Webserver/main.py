@@ -149,7 +149,7 @@ async def _avanza(carro):
             carros[carro].ultDir = carros[carro].dirControl
             res = carros[carro].dirControl
         else:
-            res = await asyncio.wait_for(auxiliares.carros[carro].queue.get(), timeout = 1.0)
+            res = await asyncio.wait_for(auxiliares.carros[carro].queue.get(), timeout = 20.0)
             auxiliares.carros[carro].dire = res
             auxiliares.carros[carro].queue.task_done()
         
@@ -160,12 +160,12 @@ async def _avanza(carro):
             carros[carro].ajustesSeguidos = 0
 
         logging.warning(f'{time.time()} - Se envia respuesta para /avanzaMotores/{carro}: {dir_nueva}')
-        return str(dir_nueva) 
+        return Response(content = str(dir_nueva), media_type = "text/plain") 
 
     except asyncio.TimeoutError:
         auxiliares.carros[carro].dire = 'V'
         logging.warning(f'{time.time()} - Timeout para /avanzaMotores/{carro}: V')
-        return str('V')
+        return Response(content=str('V'), media_type="text/plain")
 
 
 @app.get("/control/{carro}", response_class=HTMLResponse)
@@ -363,7 +363,7 @@ async def _posicion(carro,front,back):
 @app.get("/velocidad/{carro}")
 async def velocidad(carro):
     st = auxiliares.vel['vh'] + auxiliares.vel['vl'] + auxiliares.vel['vn']
-    return st
+    return Response(content=st, media_type="text/plain")
 
 
 if __name__ == '__main__':
