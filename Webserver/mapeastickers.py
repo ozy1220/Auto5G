@@ -6,98 +6,53 @@ BAN_SECCION = 1024
 BAN_ENTRADA_SUR = 2048
 BAN_ENTRADA_MEDIA = 4096
 
-for i in range(721):
-    coord[str(i)] = {}
+calles = [
+    # Calle 0
+    [
+        [1, 434, 435, 436, 54],
+        [2, 3, 5, 6, 8],
+        [4, 463, 464, 465, 5],
+        [9, 10, 12, 13, 14],
+        [15, 16, 17, 19, 20],
+        [21, 22, 24, 26, 27],
+        [11, 666, 667, 668, 64],
+        [29, 30, 32, 33, 35],
+        [36, 37, 38, 39, 41],
+        [18, 678, 679, 680, 71],
+        [42, 43, 44, 46, 47],
+        [48, 49, 51, 52, 55],
+        [56, 58, 59, 60, 61],
+        [25, 492, 493, 494, 78],
+        [62, 63, 65, 66, 67],
+        [28, 521, 522, 523, 81],
+        [31, 550, 551, 552, 84],
+        [68, 69, 70, 72, 73],
+        [34, 579, 580, 581, 87],
+        [74, 75, 76, 77, 79],
+        [80, 82, 83, 85, 86],
+        [40, 690, 691, 692, 93],
+        [88, 89, 90, 91, 92],
+        [45, 702, 703, 704, 98],
+        [94, 95, 96, 97, 99],
+        [50, 608, 609, 610, 103],
+        [100, 101, 102, 104, 105],
+        [53, 637, 638, 639, 106]
+    ]
+]
 
-# Dummy
-coord['0']['banderas'] = 0
+seccion_inicial = [0]
 
-# Lineas horizontales
-offset = [1, 4, 25, 28, 30, 33, 50, 53]
-numoffset = 8
-secciones = [4, 11, 18, 25, 29, 33, 39, 45, 50, 54]
-numsecciones = 10
-ini = 1
-linea_y = 0
-vuelta = 0
-for linea in range(8):
-    bandera = BAN_HORIZONTAL + linea
-    for i in range(53):
-        coord[str(i + ini)]['banderas'] = bandera
-    
-    for o in range(8):
-        coord[str(ini + offset[o] - 1)]['banderas'] += BAN_VERTICAL + (o << 4)
-
-    ind = 0
-    for i in range(53):
-        if (i + 1) == secciones[ind]: ind += 1
-
-        snorte = linea_y + ind + 1
-        ssur = linea_y - 10 + ind + 1
-        if snorte > 70: snorte = -1
-        if ssur < 1: ssur = - 1
-
-        coord[str(i + ini)]['norte'] = snorte
-        coord[str(i + ini)]['sur'] = ssur
-    
-    linea_y = linea_y + 10
-
-    ini += 53
-    if ini > 324: ini = 381
-
-# Lineas verticales
-ini = 434
-sec_e = [-1, 1, 4, 5, 5, 6, 9, 10]
-sec_o = [1, 2, 5, 6, 6, 7, 10, -1]
-sini = [0, 3, 10, 13, 15, 18, 26]
-sfin = [3, 10, 13, 15, 18, 26, 29]
-
-for linea in range(8):
-    bandera = BAN_VERTICAL + (linea << 4)
-    for i in range(29):
-        coord[str(i + ini)]['banderas'] = bandera
-    
-    for salto in range(7):
-        for i in range(sini[salto], sfin[salto], 1):
-            if sec_e[linea] != -1:
-                coord[str(i + ini)]['oeste'] = sec_e[linea] + (salto * 10)
-            else:
-                coord[str(i + ini)]['oeste'] = sec_e[linea]
-
-            if sec_o[linea] != -1:
-                coord[str(i + ini)]['este'] = sec_o[linea] + (salto * 10)
-            else:
-                coord[str(i + ini)]['este'] = sec_o[linea]
-
-    ini += 29
-
-# Secciones
-ini = 666
-sec_e = [2, 3, 7, 8]
-sec_o = [3, 4, 8, 9]
-sini = [0, 3, 6, 9]
-sfin = [3, 6, 9, 12]
-soff = [0, 20, 40, 60]
-for seccion in range(4):
-    bandera = BAN_SECCION + (seccion << 8)
-    for i in range(12):
-        coord[str(ini + i)]['banderas'] = bandera
-
-    for tramo in range(4):
-        for i in range(sini[tramo], sfin[tramo], 1):
-            coord[str(i + ini)]['oeste'] = sec_e[seccion] + soff[tramo]
-            coord[str(i + ini)]['este'] = sec_o[seccion] + soff[tramo]
-
-    ini += 12
-
-# Entrada
-ini = 637
-for i in range(3):
-    coord[str(ini + i)]['banderas'] += BAN_ENTRADA_SUR
-
-ini = 652
-for i in range(3):
-    coord[str(ini + i)]['banderas'] += BAN_ENTRADA_MEDIA
+for calle in range(len(calles)):
+    seccion = seccion_inicial[calle]
+    for tramo in range(len(calles[calle])):
+        for carril in range(len(calles[calle][tramo])):
+            sticker = calles[calle][tramo][carril]
+            coord[sticker] = {}
+            coord[sticker]['calle'] = calle
+            coord[sticker]['carril'] = carril + 1
+            coord[sticker]['seccion_a'] = seccion
+            coord[sticker]['seccion_b'] = seccion + 1
+        seccion += 1
 
 file = open("mapeo.obj", "w")
 file.write("coordenadas = ")

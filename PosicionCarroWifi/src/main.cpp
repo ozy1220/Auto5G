@@ -18,10 +18,11 @@ MFRC522 Front(SS_PIN_1, R_PIN_1); //Creamos el objeto para el RC522
 MFRC522 Back(SS_PIN_2, R_PIN_2);
 
 //WIFI
-const char* WIFI_SSID = "EcoCharlyBravo";
-const char* WIFI_PASSWORD = "6322167445Eco87";
-const char* IP_SERVER = "10.70.1.19";  
+const char* WIFI_SSID = "OSAIH6666";
+const char* DIR_IP = "192.168.137.1";  
+const char* WIFI_PASSWORD = "cuartoninos2";
 WiFiClient wf;
+HTTPClient http;    //Declare object of class HTTPClient
 
 //lector de rfid
 unsigned int posb,posf,trash,parb,parf;
@@ -31,7 +32,7 @@ byte readBlockData[20];
 MFRC522::StatusCode status;
 
 //color de carro
-String color = "Rojo";   
+String color = "Verde";   
 bool llama,repe;
 
 bool ReadBack(int blockNum, byte *readBlockData) 
@@ -47,7 +48,7 @@ bool ReadBack(int blockNum, byte *readBlockData)
   }
   else
   {
-    Serial.println("Block was read successfully");  
+    //Serial.println("Block was read successfully");  
     return true;
   }
   
@@ -65,24 +66,26 @@ bool ReadFront(int blockNum, byte *readBlockData)
   }
   else
   {
-    Serial.println("Block was read successfully");  
+    //Serial.println("Block was read successfully");  
     return true;
   }
   
 }
 
 void postEnWeb() {
-  HTTPClient http;    //Declare object of class HTTPClient
 
   String link = "/posicion/" + color + '/' + posf + '/' + posb ;
   Serial.println(link);
 
-  wf.connect(IP_SERVER, 8080);
-  http.begin(wf, IP_SERVER, 8080, link);     //Specify request destination
-  
+  if (!wf.connected()){
+    http.end();
+    wf.connect(DIR_IP, 8080);    
+    http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
+  }
+
   int code = http.GET();
-  Serial.println(code);
-  http.end();
+  Serial.println("Fin del get");
+  if (code != 200) Serial.println(code);
 }
 
 bool connectWifi()
@@ -98,6 +101,7 @@ bool connectWifi()
   {
     delay(500);
     Serial.print(".");
+    Serial.print(WiFi.status());
     maxRetries--;
     if (maxRetries <= 0)
     {
@@ -152,22 +156,13 @@ void loop() {
     if ( Front.PICC_ReadCardSerial()) {  
       if (ReadFront(blockNum, readBlockData)) {
         trash = *((unsigned int*) readBlockData);
-        parf = 0;          
+        if (posf != trash){
+          posf = trash;
+          llama = true;
+        }
       }     
     }     
 	}
-  else {
-    if (!parf) parf = 1;
-    else if (parf == 1) {
-      parf = 2;
-      trash = 0;
-    }
-  }	
-
-  if (posf != trash){
-    posf = trash;
-    llama = true;
-  }
 
   
   if (llama) postEnWeb();

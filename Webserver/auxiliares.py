@@ -2,6 +2,7 @@ import asyncio
 import math
 import time
 from coord import coordenadas
+import logging
 
 DIR_PARA = 'V'
 DIR_F = 'N'
@@ -14,6 +15,11 @@ DIR_BR = 'Y'
 DIR_FR = 'Z'
 
 direcciones = [DIR_PARA, DIR_F, DIR_B, DIR_R, DIR_L, DIR_FL, DIR_BL, DIR_BR, DIR_FR]
+direccionesFrente = [DIR_F, DIR_FL, DIR_FR]
+direccionesAtras = [DIR_B, DIR_BL, DIR_BR]
+direccionesAjuste = [DIR_FL, DIR_BL, DIR_FR, DIR_BR]
+
+MAX_AJUSTES = 3
 
 SIN_CONEXION = 0
 CONECTADO_MOTORES = 1
@@ -26,12 +32,22 @@ SUR = 2
 OESTE = 3
 LIMBO = 4
 
+cy_calle = [12, 48, 72, 108]
+ang_calle = [math.pi, 0, math.pi, 0]
+cx_seccion = [0, 7, 14, 21, 29, 36, 43, 50, 57, 64, 71, 79, 86, 93, 100, 107, 114, 121, 129, 136, 143, 150, 157, 165, 171, 179, 186, 193, 200, 210]
+
+# La clase carro lleva el control de:
+    # Ultima lectura del sticker front
+    # Ultima lectura del sticker back
+    # 
 
 class Carro:
     def __init__(self):
         self.frente = -1
         self.atras = -1
         self.dire = 'V'
+        self.dirControl = 'V'
+        self.ultDir = 'V'
         self.llave = ''
         self.ocupado = 'false'
         self.xf = 0
@@ -65,11 +81,14 @@ class Carro:
         self.ts_motores = 0
         self.ts_posicion = 0
         self.estatus_conexion = SIN_CONEXION
+        
+        self.ultcarril = 3
+        self.ajustesSeguidos = 0
 
 vel = {
-    'vh': '200',
-    'vl': '100',
-    'vn': '150',
+    'vh': '150',
+    'vl': '090',
+    'vn': '120',
     'v1': '050',
     'v2': '100',
     'v3': '150',
@@ -242,13 +261,31 @@ def calculaSeccion(carro, front, back):
 
 
 def overrideDireccion(carro, direccion):
-    print(direccion)
-    print(carros[carro].prohibidos[direccion])
-    if carros[carro].prohibidos[direccion]:
-        res = DIR_PARA
 
-    else:
-        res = direccion
+    calle = carros[carro].calle
+    seccion_f = carros[carro].seccion_f
+    seccion_a = carros[carro].seccion_a
 
-    print(f'Se recibio direccion {direccion}, se envia {res}')
+    res = direccion
+
+    # Prohibiciones de la calle 0
+    if calle == 0 and seccion_f != -1:
+        # Prohibiciones hacia delante
+        if direccion == DIR_F:
+            if seccion_f <= 2 or seccion_a <= 4: res = DIR_PARA
+
+        # Prohibiciones hacia atras
+        if direccion == DIR_B:
+            if seccion_f >= 24 or seccion_a >= 26: res = DIR_PARA
+
+        # Prohibiciones hacia el ESTE
+        if direccion == DIR_R:
+            permite = (seccion_f == 16) or (seccion_f <= 2)
+            if not permite: res = DIR_PARA
+
+        # Prohibiciones hacia el OESTE
+        if direccion == DIR_L:
+            res = DIR_PARA
+
+    logging.warning(f'Se recibio direccion {direccion}, se envia {res}. Calle = {calle}, seccion_f = {seccion_f}, seccion_a = {seccion_a}')
     return res
