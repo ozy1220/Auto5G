@@ -77,15 +77,18 @@ void postEnWeb() {
   String link = "/posicion/" + color + '/' + posf + '/' + posb ;
   Serial.println(link);
 
-  if (!wf.connected()){
-    http.end();
-    wf.connect(DIR_IP, 8080);    
+ // if (!wf.connected()){
+ //   http.end();
+    wf.connect(DIR_IP, 8080);
+    wf.disableKeepAlive();    
     http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
-  }
+  //}
 
   int code = http.GET();
   Serial.println("Fin del get");
   if (code != 200) Serial.println(code);
+
+  http.end();
 }
 
 bool connectWifi()
@@ -111,8 +114,6 @@ bool connectWifi()
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println(WiFi.localIP());
-
-  //wf.connect("10.70.1.19", 8080);
 
   return true;
 }
