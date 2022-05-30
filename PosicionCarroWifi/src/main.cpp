@@ -21,8 +21,6 @@ MFRC522 Back(SS_PIN_2, R_PIN_2);
 const char* WIFI_SSID = "OSAIH6666";
 const char* DIR_IP = "192.168.137.1";  
 const char* WIFI_PASSWORD = "cuartoninos2";
-WiFiClient wf;
-HTTPClient http;    //Declare object of class HTTPClient
 
 //lector de rfid
 unsigned int posb,posf,trash,parb,parf;
@@ -74,6 +72,9 @@ bool ReadFront(int blockNum, byte *readBlockData)
 
 void postEnWeb() {
 
+  WiFiClient wf;
+  HTTPClient http;
+
   String link = "/posicion/" + color + '/' + posf + '/' + posb ;
   Serial.println(link);
 
@@ -90,6 +91,24 @@ void postEnWeb() {
  //
   http.end();
 }
+
+void obtenVelocidades() {
+
+  String link = "/velocidad/Pos_" + color;
+
+  WiFiClient wf;
+  HTTPClient http;
+  
+  wf.connect(DIR_IP, 8080);    
+  http.setTimeout(15000);
+  http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
+
+  int code = http.GET();
+  if (code != 200) Serial.println(code);
+
+  http.end();
+}
+
 
 bool connectWifi()
 {
@@ -127,6 +146,9 @@ void setup() {
   Serial.print("\n");
   Serial.print("Connecting to ");
   Serial.println(WIFI_SSID);
+
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
+  WiFi.mode(WIFI_STA);
   if (connectWifi()) Serial.println("Estoy conectado");
   else Serial.println("Se intento y no se logro :'(");
 }

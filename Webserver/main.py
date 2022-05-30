@@ -149,7 +149,7 @@ async def _avanza(carro):
             carros[carro].ultDir = carros[carro].dirControl
             res = carros[carro].dirControl
         else:
-            res = await asyncio.wait_for(auxiliares.carros[carro].queue.get(), timeout = 20.0)
+            res = await asyncio.wait_for(auxiliares.carros[carro].queue.get(), timeout = 5.0)
             auxiliares.carros[carro].dire = res
             auxiliares.carros[carro].queue.task_done()
         
@@ -243,6 +243,7 @@ async def _posicion(carro,front,back):
     dirControl = carros[carro].dirControl
     calle = carros[carro].calle
     carril = carros[carro].ultcarril
+    columna = carros[carro].ultcol
 
     # Toma la decision dependiendo de si vas avanzando hacia adelante o atras
     dirNueva = ""
@@ -251,18 +252,19 @@ async def _posicion(carro,front,back):
         try:
             if carros[carro].frente != front:
                 carril = int(coordenadas[int(front)]['carril'])
+                columna = int(coordenadas[int(front)]['col'])
             else:
                 carril = int(coordenadas[int(back)]['carril'])
         except:
             carril = 3
-        logging.warning(f'{time.time()} Se leyo sticker {front} que se consdiera del carril {carril}')
+        logging.warning(f'{time.time()} Se leyo sticker frontal {front} que se consdiera del carril {carril}')
         if carril == 5:
             # El carril 5 siempre cierra al centro
             dirNueva = auxiliares.DIR_FL
         elif carril == 4 and carros[carro].ultcarril != 5:
             # El carril 4 gira a menos que venga del 5, lo cual significa que ya esta cerrando 
             dirNueva = auxiliares.DIR_FL
-        elif carril == 3:
+        elif carril == 3 and columna != carros[carro].ultcol:
             # El giro del 3 debe ser para compensar adecuaciones, si viene de la parte de abajo, de arriba o del centro
             if carros[carro].ultcarril > 3:
                 dirNueva = auxiliares.DIR_FR
@@ -279,16 +281,17 @@ async def _posicion(carro,front,back):
         try:
             if carros[carro].atras != back:
                 carril = int(coordenadas[int(back)]['carril'])
+                columna = int(coordenadas[int(back)]['col'])
             else:
                 carril = int(coordenadas[int(front)]['carril'])
         except:
             carril = 3
-        logging.warning(f'{time.time()} Se leyo sticker {back} que se consdiera del carril {carril}')
+        logging.warning(f'{time.time()} Se leyo sticker trasero {back} que se consdiera del carril {carril}')
         if carril == 5:
             dirNueva = auxiliares.DIR_BL
         elif carril == 4 and carros[carro].ultcarril != 5:
             dirNueva = auxiliares.DIR_BL
-        elif carril == 3:
+        elif carril == 3 and columna != carros[carro].ultcol:
             if carros[carro].ultcarril > 3:
                 dirNueva = auxiliares.DIR_BR
             elif carros[carro].ultcarril < 3:
@@ -302,6 +305,7 @@ async def _posicion(carro,front,back):
     carros[carro].ultcarril = carril
     carros[carro].frente = front
     carros[carro].atras = back
+    carros[carro].ultcol = columna
 
     # Si hay una direccion nueva, insertala en la cola
     if dirNueva != "":
@@ -317,6 +321,11 @@ async def _posicion(carro,front,back):
             carros[carro].ajustesSeguidos += 1
         else:
             logging.warning(f'Eliminando ajuste por exceso de ajustes consecutivos')
+    else:
+        dirNueva = auxiliares.overrideDireccion(carro, dirControl)
+        if dirNueva != dirControl:
+            logging.warning(f'Insertando comando ficticio por prohibicion de pista {dirControl}, {dirNueva}')
+            carros[carro].queue.put_nowait(dirNueva)
 
     # Determina la seccion en la que esta el auto
     if calle <= 3:

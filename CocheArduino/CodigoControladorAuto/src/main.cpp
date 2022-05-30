@@ -17,19 +17,15 @@
 #define MSK_4 (1 << In4)
 
 
-const char* WIFI_SSID = "EcoCharlyBravo";
-const char* DIR_IP = "10.70.1.19";
-const char* WIFI_PASSWORD = "6322167445Eco87";
+const char* WIFI_SSID = "TP-LINK_0B1B62";
+const char* DIR_IP = "192.168.0.100";
+const char* WIFI_PASSWORD = "49811537";
 
 /*
 const char* WIFI_SSID = "OSAIH6666";
 const char* DIR_IP = "192.168.137.1";  
 const char* WIFI_PASSWORD = "cuartoninos2";
 */
-
-WiFiClient wf, clientePosicion;
-WiFiServer wifiServer(8888);
-HTTPClient http;    //Declare object of class HTTPClient
 
 //color de carro
 String color = "Verde";
@@ -156,6 +152,9 @@ void aplicaDireccion(char c){
 
 char obtenDeWeb() {
 
+  WiFiClient wf;
+  HTTPClient http;
+
   String link = "/avanzaMotores/" + color;
 
 ////  if (!wf.connected()){
@@ -169,7 +168,9 @@ char obtenDeWeb() {
   int code = http.GET();
   if (code != 200) Serial.println(code);
 
-  String payload = http.getString();    //Get the response payload
+  String payload;
+  if (code > 0) payload = http.getString();    //Get the response payload
+  else payload = "V";
   
   http.end();
 
@@ -180,7 +181,8 @@ void obtenVelocidades() {
 
   String link = "/velocidad/" + color;
 
-  HTTPClient http;    //Declare object of class HTTPClient
+  WiFiClient wf;
+  HTTPClient http;
   
   wf.connect(DIR_IP, 8080);    
   http.setTimeout(15000);
@@ -208,6 +210,8 @@ void obtenVelocidades() {
 
 void registraMotores() {
 
+  WiFiClient wf;
+  HTTPClient http;  
   String link = "/registraArduino/" + color + "/motores";
 
   wf.connect(DIR_IP, 8080);
@@ -224,15 +228,14 @@ void setup() {
   Serial.begin(115200);
   Serial.println();
 
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
+  WiFi.mode(WIFI_STA);
+
   Serial.print("Connecting to ");
   Serial.println(WIFI_SSID);
   if (connectWifi()) Serial.println("Estoy conectado");
   else Serial.println("Se intento y no se logro :'(");
   pas = 'V';
-
-	while (!WiFi.softAP(WIFI_SSID, WIFI_PASSWORD, 6, false, 15)) {
-		delay(500);
-	}
   
   //velocidades
   vn = 150;

@@ -50,6 +50,7 @@ for calle in range(len(calles)):
             coord[sticker] = {}
             coord[sticker]['calle'] = calle
             coord[sticker]['carril'] = carril + 1
+            coord[sticker]['col'] = tramo
             coord[sticker]['seccion_a'] = seccion
             coord[sticker]['seccion_b'] = seccion + 1
         seccion += 1

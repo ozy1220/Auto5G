@@ -83,6 +83,7 @@ class Carro:
         self.estatus_conexion = SIN_CONEXION
         
         self.ultcarril = 3
+        self.ultcol = 50
         self.ajustesSeguidos = 0
 
 vel = {
