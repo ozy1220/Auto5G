@@ -17,9 +17,9 @@
 #define MSK_4 (1 << In4)
 
 
-const char* WIFI_SSID = "TP-LINK_0B1B62";
+const char* WIFI_SSID = "TP-Link_3D01";
 const char* DIR_IP = "192.168.0.100";
-const char* WIFI_PASSWORD = "49811537";
+const char* WIFI_PASSWORD = "01138580";
 
 /*
 const char* WIFI_SSID = "OSAIH6666";
@@ -27,13 +27,14 @@ const char* DIR_IP = "192.168.137.1";
 const char* WIFI_PASSWORD = "cuartoninos2";
 */
 
+WiFiClient wf;
+
 //color de carro
 String color = "Verde";
 int vh,vl,vn;
 int a,b,c,d,v1,v2;
 char pas;
 
-// Diagonales por aumento de velocidad
 
 void norte() {
   int msk = MSK_2 | MSK_4;
@@ -152,40 +153,66 @@ void aplicaDireccion(char c){
 
 char obtenDeWeb() {
 
-  WiFiClient wf;
-  HTTPClient http;
 
   String link = "/avanzaMotores/" + color;
-
-////  if (!wf.connected()){
-//    http.end();
-    wf.connect(DIR_IP, 8080);    
-    wf.disableKeepAlive();
-    http.setTimeout(25000);
-    http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
-//  }
-
-  int code = http.GET();
-  if (code != 200) Serial.println(code);
-
   String payload;
-  if (code > 0) payload = http.getString();    //Get the response payload
-  else payload = "V";
-  
-  http.end();
 
-  return payload[0];
+  if (wf.connect(DIR_IP, 8080)){    
+    HTTPClient http;
+    http.setTimeout(16000);
+    http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
+
+    int code = http.GET();
+
+    switch (code){
+      case 200: payload = "V"; break;
+      case 201: payload = "N"; break;
+      case 202: payload = "S"; break;
+      case 203: payload = "E"; break;
+      case 204: payload = "O"; break;
+      case 205: payload = "W"; break;
+      case 206: payload = "X"; break;
+      case 207: payload = "Y"; break;
+      case 208: payload = "Z"; break;
+    }
+
+    //if (code != 200) Serial.println(code);
+
+    //if (code > 0) payload = http.getString();    //Get the response payload
+    //else payload = "V";
+  
+    http.end();
+  }
+
+  Serial.println(link + ": " + payload);
+  if (payload.length() >= 1) return payload[0];
+  else return 'V';
 }
 
 void obtenVelocidades() {
 
   String link = "/velocidad/" + color;
 
+/*  if (wf.connect(DIR_IP, 8080)){
+      String getstr = "GET " + link + " HTTP/1.1";
+      Serial.println(getstr);
+      wf.println(getstr);
+      wf.println("Host: 192.168.137.1:8080");
+      wf.println("User-Agent: ESP8266");
+      wf.println("Content-Length: 0");
+      wf.println();
+      
+      Serial.println("Reading");
+      String velocidades = wf.readStringUntil('$');
+      Serial.println(velocidades);
+  }
+*/
+
   WiFiClient wf;
   HTTPClient http;
   
   wf.connect(DIR_IP, 8080);    
-  http.setTimeout(15000);
+  http.setTimeout(5000);
   http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
 
   int code = http.GET();
@@ -206,6 +233,7 @@ void obtenVelocidades() {
     Serial.println(vn);
   }
   http.end();
+
 }
 
 void registraMotores() {
@@ -257,10 +285,10 @@ void setup() {
 
 }
 
-
 void loop() {
 
     char c;
     c = obtenDeWeb();
     aplicaDireccion(c);
+    //delay(1);
 }

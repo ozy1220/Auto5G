@@ -81,6 +81,8 @@ class Carro:
         self.ts_motores = 0
         self.ts_posicion = 0
         self.estatus_conexion = SIN_CONEXION
+
+        self.dirBrujula = 0
         
         self.ultcarril = 3
         self.ultcol = 50

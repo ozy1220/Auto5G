@@ -103,8 +103,8 @@
 
 </style>
 <body>
-    <script  src="https://unpkg.com/vue@3"></script>
-    <script  type="text/javascript" src="http://code.jquery.com/jquery.min.js" ></script>
+    <script  src="/img/vue.global.js"></script>
+    <script  type="text/javascript" src="/img/jquery.min.js" ></script>
 
     <div id="app">
         <div id="info-carros" width="100%">
@@ -240,19 +240,18 @@
                     es.addEventListener('message', event => {
                         let data = JSON.parse(event.data);
                         if (data.color == 'Rojo'){
-                            this.myRedCar.x = data.coordx * 5;
-                            this.myRedCar.y = data.coordy * 5;
+                            this.myRedCar.x = data.coordx * 0.5;
+                            this.myRedCar.y = data.coordy * 0.5;
                             this.myRedCar.deg = data.rad;
                         }
                         else if (data.color == 'Verde'){
-                            this.myGreenCar.x = this.xVerde = data.coordx * 5;
-                            this.myGreenCar.y = this.yVerde = data.coordy * 5;
+                            this.myGreenCar.x = this.xVerde = data.coordx * 0.5;
+                            this.myGreenCar.y = this.yVerde = data.coordy * 0.5;
                             this.myGreenCar.deg = this.aVerde = data.rad;
-                            this.aVerde *= 180;
                         }
                         else if (data.color == 'Azul'){
-                            this.myBlueCar.x = data.coordx * 5;
-                            this.myBlueCar.y = data.coordy * 5;
+                            this.myBlueCar.x = data.coordx * 0.5;
+                            this.myBlueCar.y = data.coordy * 0.5;
                             this.myBlueCar.deg = data.rad;
                         }
 
