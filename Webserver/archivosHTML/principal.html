@@ -141,7 +141,7 @@
     <div>
         <div id="mapa" class="mapa">
             
-            <canvas id="canvas" width=1100 height=610></canvas>
+            <canvas id="canvas" width=1200 height=610></canvas>
         
         </div>        
     </div>
@@ -151,15 +151,96 @@
         var canvas = document.getElementById("canvas"),
         cx = canvas.getContext("2d");
 
+        fsup = 200
+        cizq = 450
+        cder = 750
+        finf = 410
+
+        estadoSemaforo = 0
+
+        secciones = [
+            { x: 1, y: fsup + 1, lx: 203, ly: 103, status: 0, id: '0' },
+            { x: 1, y: fsup + 105, lx: 203, ly: 103, status: 0, id: '0' },
+            { x: 205, y: fsup + 1, lx: 203, ly: 103, status: 0, id: '0' },
+            { x: 205, y: fsup + 105, lx: 203, ly: 103, status: 0, id: '0' },
+            
+            { x: cder + 41, y: fsup + 1, lx: 203, ly: 103, status: 0, id: '0' },
+            { x: cder + 41, y: fsup + 105, lx: 203, ly: 103, status: 0, id: '0' },
+            { x: cder + 245, y: fsup + 1, lx: 203, ly: 103, status: 0, id: '0' },
+            { x: cder + 245, y: fsup + 105, lx: 203, ly: 103, status: 0, id: '0' },
+            
+            { x: cizq + 1, y: 0, lx: 148, ly: 170, status: 0, id: '0' },
+            { x: cizq + 1, y: finf + 30, lx: 148, ly: 170, status: 0, id: '0' },
+            { x: cizq + 151, y: 0, lx: 148, ly: 170, status: 0, id: '0' },
+            { x: cizq + 151, y: finf + 30, lx: 148, ly: 170, status: 0, id: '0' },
+
+            { x: cizq + 1, y: fsup + 1, lx: 148, ly: 103, status: 0, id: '0' },
+            { x: cizq + 1, y: fsup + 106, lx: 148, ly: 103, status: 0, id: '0' },
+            { x: cizq + 151, y: fsup + 1, lx: 148, ly: 103, status: 0, id: '0' },
+            { x: cizq + 151, y: fsup + 106, lx: 148, ly: 103, status: 0, id: '0' }
+        ]
+
+        semaforo = [
+            { x: cizq - 40, y: fsup + 1, lx: 40, ly: 208 },
+            { x: cder + 1, y: fsup + 1, lx: 39, ly: 208 },
+            { x: cizq + 1, y: fsup - 29, lx: 298, ly: 29 },
+            { x: cizq + 1, y: finf, lx: 298, ly: 29 }
+        ]
+
         function dibujaRect(x1, y1, x2, y2, relleno){
             if (relleno != ""){
                 cx.fillStyle = relleno;
-                cx.fillRect(x1 * 5, y1 * 5, x2 * 5, y2* 5);
+                cx.fillRect(x1, y1, x2, y2);
             }
             else {
                 cx.beginPath();
-                cx.rect(x1 * 5, y1 * 5, x2 * 5, y2* 5);
+                cx.rect(x1, y1, x2, y2);
                 cx.stroke();
+            }
+        }
+
+        function dibujaCalles(){
+            // Dibuja las lineas
+            dibujaRect(0, 0, 1200, 610, "");
+            dibujaRect(0, 0, cizq, fsup, 'gray');
+            dibujaRect(cder, 0, 1200 - cder, fsup, 'gray');
+            dibujaRect(0, finf, cizq, fsup, 'gray');
+            dibujaRect(cder, finf, 1200 - cder, 610 - finf, 'gray');
+
+            cx.setLineDash([5, 10]);
+            cx.lineWidth = "2";
+            cx.strokeStyle = "gray";
+
+            cx.beginPath();
+            cx.moveTo(0, 305);
+            cx.lineTo(1200, 305);
+            cx.stroke();                
+
+            cx.beginPath();
+            cx.moveTo(600, 0);
+            cx.lineTo(600, 610);
+            cx.stroke();                
+        }
+
+        function dibujaBloques(){
+            for(var i = 0; i < secciones.length; ++i){
+                if (secciones[i].status == 1) dibujaRect(secciones[i].x, secciones[i].y, secciones[i].lx, secciones[i].ly, "yellow");
+                else if (secciones[i].status == 2) dibujaRect(secciones[i].x, secciones[i].y, secciones[i].lx, secciones[i].ly, "red");
+                else  dibujaRect(secciones[i].x, secciones[i].y, secciones[i].lx, secciones[i].ly, "white");
+            }
+        }
+
+        function dibujaSemaforo(){
+            if (estadoSemaforo == 0){
+                for(var i = 0; i < 4; ++i) dibujaRect(semaforo[i].x, semaforo[i].y, semaforo[i].lx, semaforo[i].ly, "white");
+            }
+            else if (estadoSemaforo == 1){
+                for(var i = 0; i < 2; ++i) dibujaRect(semaforo[i].x, semaforo[i].y, semaforo[i].lx, semaforo[i].ly, "green");
+                for(var i = 2; i < 4; ++i) dibujaRect(semaforo[i].x, semaforo[i].y, semaforo[i].lx, semaforo[i].ly, "red");
+            }
+            else{
+                for(var i = 0; i < 2; ++i) dibujaRect(semaforo[i].x, semaforo[i].y, semaforo[i].lx, semaforo[i].ly, "red");
+                for(var i = 2; i < 4; ++i) dibujaRect(semaforo[i].x, semaforo[i].y, semaforo[i].lx, semaforo[i].ly, "green");
             }
         }
 
@@ -191,8 +272,60 @@
                 cx.drawImage(this.imga, -this.imga.width / 2, -this.imga.height / 2);
                 cx.setTransform(1, 0, 0, 1, 0, 0);
             }
-        
         }
+
+        function getMousePosition(canvas, event) {
+            let rect = canvas.getBoundingClientRect();
+            let x = event.clientX - rect.left;
+            let y = event.clientY - rect.top;
+
+            for(var i = 0; i < secciones.length; ++i){
+                if (secciones[i].x <= x && secciones[i].x + secciones[i].lx > x && secciones[i].y <= y && secciones[i].y + secciones[i].ly > y){
+                    secciones[i].status = (secciones[i].status + 1) % 3;
+                    fetch("/updatezona/" + i.toString() + "/" + secciones[i].status.toString());
+                    dibujaBloques();
+                    break;
+                }
+            }
+
+            for(var i = 0; i < semaforo.length; ++i){
+                if (semaforo[i].x <= x && semaforo[i].x + semaforo[i].lx > x && semaforo[i].y <= y && semaforo[i].y + semaforo[i].ly > y){
+                    estadoSemaforo = (estadoSemaforo + 1) % 3;
+                    if (estadoSemaforo == 0) {
+                        fetch("/updatezona/17/0");
+                        fetch("/updatezona/18/0");
+                        fetch("/updatezona/19/0");
+                        fetch("/updatezona/20/0");
+                    }
+
+                    else if (estadoSemaforo == 1) {
+                        fetch("/updatezona/17/0");
+                        fetch("/updatezona/18/0");
+                        fetch("/updatezona/19/2");
+                        fetch("/updatezona/20/2");
+                    }
+
+                    else {
+                        fetch("/updatezona/17/2");
+                        fetch("/updatezona/18/2");
+                        fetch("/updatezona/19/0");
+                        fetch("/updatezona/20/0");
+                    }
+
+                    dibujaSemaforo();
+                    break;
+                }
+            }
+
+        }
+      
+        let canvasElem = document.querySelector("canvas");
+          
+        canvasElem.addEventListener("mousedown", function(e)
+        {
+            getMousePosition(canvasElem, e);
+        });
+
 
         const {createApp} = Vue
 
@@ -214,13 +347,7 @@
                 }
             },
             created() {
-
-                // Dibuja las lineas
-                dibujaRect(0, 0, 220, 122, "");
-                dibujaRect(24, 24, 66, 16, 'gray');
-                dibujaRect(134, 24, 66, 16, 'gray');
-                dibujaRect(24, 84, 66, 14, 'gray');
-                dibujaRect(134, 84, 66, 14, 'gray');
+                dibujaCalles();
 
                 this.myRedCar.init();
                 this.myGreenCar.init();
@@ -240,31 +367,25 @@
                     es.addEventListener('message', event => {
                         let data = JSON.parse(event.data);
                         if (data.color == 'Rojo'){
-                            this.myRedCar.x = data.coordx * 5;
-                            this.myRedCar.y = data.coordy * 5;
+                            this.myRedCar.x = data.coordx * 0.5;
+                            this.myRedCar.y = data.coordy * 0.5;
                             this.myRedCar.deg = data.rad;
                         }
                         else if (data.color == 'Verde'){
-                            this.myGreenCar.x = this.xVerde = data.coordx * 5;
-                            this.myGreenCar.y = this.yVerde = data.coordy * 5;
+                            this.myGreenCar.x = this.xVerde = data.coordx * 0.5;
+                            this.myGreenCar.y = this.yVerde = data.coordy * 0.5;
                             this.myGreenCar.deg = this.aVerde = data.rad;
-                            this.aVerde *= 180;
                         }
                         else if (data.color == 'Azul'){
-                            this.myBlueCar.x = data.coordx * 5;
-                            this.myBlueCar.y = data.coordy * 5;
+                            this.myBlueCar.x = data.coordx * 0.5;
+                            this.myBlueCar.y = data.coordy * 0.5;
                             this.myBlueCar.deg = data.rad;
                         }
 
                         cx.clearRect(0, 0, canvas.width, canvas.height);
 
-                        // Dibuja las lineas
-                        dibujaRect(0, 0, 220, 122, "");
-                        dibujaRect(24, 24, 66, 16, 'gray');
-                        dibujaRect(134, 24, 66, 16, 'gray');
-                        dibujaRect(24, 84, 66, 14, 'gray');
-                        dibujaRect(134, 84, 66, 14, 'gray');
-
+                        dibujaCalles();
+                        
                         if (this.conRojo == '') this.myRedCar.drawRotated();
                         if (this.conVerde == '') this.myGreenCar.drawRotated();
                         if (this.conAzul == '') this.myBlueCar.drawRotated();
