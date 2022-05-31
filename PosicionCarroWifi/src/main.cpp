@@ -18,14 +18,24 @@ MFRC522 Front(SS_PIN_1, R_PIN_1); //Creamos el objeto para el RC522
 MFRC522 Back(SS_PIN_2, R_PIN_2);
 
 //WIFI
+
+const char* WIFI_SSID = "TP-Link_3D01";
+const char* DIR_IP = "192.168.0.100";
+const char* WIFI_PASSWORD = "01138580";
+
+
+/*
 const char* WIFI_SSID = "OSAIH6666";
 const char* DIR_IP = "192.168.137.1";  
 const char* WIFI_PASSWORD = "cuartoninos2";
-WiFiClient wf;
-HTTPClient http;    //Declare object of class HTTPClient
+*/
+
+  WiFiClient wf;
+  HTTPClient http;
+
 
 //lector de rfid
-unsigned int posb,posf,trash,parb,parf;
+unsigned int ultb, penb, ultf, penf, trash;
 int blockNum = 5;
 byte bufferLen = 18;
 byte readBlockData[20];
@@ -34,6 +44,7 @@ MFRC522::StatusCode status;
 //color de carro
 String color = "Verde";   
 bool llama,repe;
+bool primeraVez = true;
 
 bool ReadBack(int blockNum, byte *readBlockData) 
 {
@@ -74,22 +85,47 @@ bool ReadFront(int blockNum, byte *readBlockData)
 
 void postEnWeb() {
 
-  String link = "/posicion/" + color + '/' + posf + '/' + posb ;
+  String link = "/posicion/" + color + '/' + ultf + '/' + ultb ;
   Serial.println(link);
 
+  if (primeraVez){
+    Serial.println("Conectando cliente WiFi por primera vez");
+    wf.connect(DIR_IP, 8080);
+    primeraVez = false;
+  }
  // if (!wf.connected()){
  //   http.end();
-    wf.connect(DIR_IP, 8080);
-    wf.disableKeepAlive();    
-    http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
+ //   wf.connect(DIR_IP, 8080);
+//    wf.disableKeepAlive();    
+//    http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
   //}
 
+  Serial.println("Haciendo peticon get");
+  http.begin(wf, DIR_IP, 8080, link);
   int code = http.GET();
   Serial.println("Fin del get");
   if (code != 200) Serial.println(code);
- //
+  http.end();
+
+}
+
+void obtenVelocidades() {
+
+  String link = "/velocidad/Pos_" + color;
+
+  WiFiClient wf;
+  HTTPClient http;
+  
+  wf.connect(DIR_IP, 8080);    
+  http.setTimeout(15000);
+  http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
+
+  int code = http.GET();
+  if (code != 200) Serial.println(code);
+
   http.end();
 }
+
 
 bool connectWifi()
 {
@@ -127,6 +163,9 @@ void setup() {
   Serial.print("\n");
   Serial.print("Connecting to ");
   Serial.println(WIFI_SSID);
+
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
+  WiFi.mode(WIFI_STA);
   if (connectWifi()) Serial.println("Estoy conectado");
   else Serial.println("Se intento y no se logro :'(");
 }
@@ -141,9 +180,15 @@ void loop() {
 
         if (ReadBack(blockNum, readBlockData)) {
           trash = *((unsigned int*) readBlockData);     
-          if (trash != posb) {
-            posb = trash;     
-            llama = true;
+          if (trash != ultb) {
+            int dif = ultb - penb;
+            if (dif < 0) dif *= -1;
+
+            if (dif != 1 || trash != penb){
+              penb = ultb;
+              ultb = trash;
+              llama = true;
+            }
           } 
         }
                      
@@ -151,15 +196,21 @@ void loop() {
 	}
 
 	// Revisamos si hay nuevas tarjetas  presentes
-  trash = posf;
+  trash = ultf;
 	if (Front.PICC_IsNewCardPresent()) {  
   	//Seleccionamos una tarjeta
     if ( Front.PICC_ReadCardSerial()) {  
       if (ReadFront(blockNum, readBlockData)) {
         trash = *((unsigned int*) readBlockData);
-        if (posf != trash){
-          posf = trash;
-          llama = true;
+        if (ultf != trash){
+            int dif = ultf - penf;
+            if (dif < 0) dif *= -1;
+
+            if (dif != 1 || trash != penf) {
+              penf = ultf;
+              ultf = trash;
+              llama = true;
+            }
         }
       }     
     }     
