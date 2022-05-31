@@ -13,7 +13,7 @@ import time
 from starlette.responses import RedirectResponse
 from coord import coordenadas
 import auxiliares
-from auxiliares import SIN_CONEXION, carros, cx_seccion, cy_calle, ang_calle
+from auxiliares import SIN_CONEXION, Bloque, carros, cx_seccion, cy_calle, ang_calle
 import math
 import timeit
 import logging
@@ -433,6 +433,11 @@ async def velocidad(carro):
     st = auxiliares.vel['vh'] + auxiliares.vel['vl'] + auxiliares.vel['vn'] + '$'
     return Response(content=st, media_type="text/plain")
 
+@app.get("/updatezona/{bloque}/{estado}")
+async def _updatezona(bloque,estado):
+    #lo manda como int o string
+    bloques[bloque].estado = estado
+    return "ok"
 
 if __name__ == '__main__':
     logging.basicConfig(filename = "logfile.log", level = logging.WARNING)
