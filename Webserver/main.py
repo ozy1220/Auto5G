@@ -175,17 +175,21 @@ async def _avanza(carro):
         logging.warning(f'{time.time()} - Timeout para /avanzaMotores/{carro}. Se enviara ' + auxiliares.DIR_PARA )
         respuesta=auxiliares.DIR_PARA
 
-    if respuesta == auxiliares.DIR_PARA: code = 200
-    elif respuesta == auxiliares.DIR_F: code = 201
-    elif respuesta == auxiliares.DIR_B: code = 202
-    elif respuesta == auxiliares.DIR_R: code = 203
-    elif respuesta == auxiliares.DIR_L: code = 204
-    elif respuesta == auxiliares.DIR_FL: code = 205
-    elif respuesta == auxiliares.DIR_BL: code = 206
-    elif respuesta == auxiliares.DIR_BR: code = 207
-    elif respuesta == auxiliares.DIR_FR: code = 208
-    elif respuesta == auxiliares.VEL_LOW: code = 209
-    elif respuesta == auxiliares.VEL_HIGH: code = 210
+    if respuesta == 'V': code = 200
+    elif respuesta == 'N': code = 201
+    elif respuesta == 'S': code = 202
+    elif respuesta == 'E': code = 203
+    elif respuesta == 'O': code = 204
+    elif respuesta == 'W': code = 205
+    elif respuesta == 'X': code = 206
+    elif respuesta == 'Y': code = 207
+    elif respuesta == 'Z': code = 208
+    elif respuesta == 'D': code = 209
+    elif respuesta == 'U': code = 210
+      
+    if respuesta == 'D' or respuesta == 'U': carros[carro].ultDir = 'V'
+    else: carros[carro].ultDir = respuesta
+
     return Response(status_code=code)
 
 

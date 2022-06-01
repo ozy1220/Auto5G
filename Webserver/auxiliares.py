@@ -1,5 +1,7 @@
 import asyncio
 from cmath import sqrt
+from curses import def_shell_mode
+from dis import dis
 from faulthandler import cancel_dump_traceback_later
 import math
 from operator import truediv
@@ -23,8 +25,8 @@ VEL_LOW = 'D'
 VEL_HIGH = 'U'
 
 #Distancias para checarse entre carros y ver si chocan o no
-DIS_DETEC = 200
-DIS_COLISION = 180
+DIS_DETEC = 240
+DIS_PARALELA = 180
 
 direcciones = [DIR_PARA, DIR_F, DIR_B, DIR_R, DIR_L, DIR_FL, DIR_BL, DIR_BR, DIR_FR]
 direccionesFrente = [DIR_F, DIR_FL, DIR_FR]
@@ -227,12 +229,18 @@ def overrideDireccion(carro, direccion):
     # Permite pasar todo lo que sean vueltas, stop y cambios de velocidad
     if direccion not in direccionesFrente and direccion not in direccionesAtras: return direccion
 
+    yf = carros[carro].yf
+    xf = carros[carro].xf
+    yb = carros[carro].ya
+    xb = carros[carro].xa
+    
     # Obten las coordenadas de ambos lectores del carro
     dirOrig = direccion
     filf = carros[carro].yf
     colf = carros[carro].xf
     filb = carros[carro].ya
     colb = carros[carro].xa
+
     pend = math.tan(carros[carro].angulo)
     ord = carros[carro].yf - carros[carro].xf*pend 
     
@@ -241,56 +249,92 @@ def overrideDireccion(carro, direccion):
         act = numcarros[i]
         if act == carro: continue
 
-        #calculo en base a las trayectorias
-        #checar y hacer pruebas con DIS_DETEC y DIS_COLISION
-        #checar caso donde angulo es casi 0 pegado a nada
         a = carros[act].xf
         b = carros[act].yf
         c = carros[act].xa
         d = carros[act].ya
-        if distancia(colf,filf,a,b) < DIS_DETEC or distancia(colf,filf,c,d) < DIS_DETEC or distancia(colb,filb,a,b) < DIS_DETEC or distancia(colb,filb,c,d) < DIS_DETEC:
-            pend2 = math.tan(carros[act].angulo)
-            ord2 = carros[act].yf - carros[act].xf*pend2
+        pend2 = math.tan(carros[act].angulo)
+        ord2 = carros[act].yf - carros[act].xf*pend2
+        
+        if pend == pend2: 
+            lineaDireta = distancia(xf,yf,a,b)
+            prohibido = 'N'
+            if distancia(xf,yf,c,d) < lineaDireta: lineaDireta = distancia(xf,yf,c,d)
+            if distancia(xb,yb,a,b) < lineaDireta:
+                lineaDireta = distancia(xb,yb,a,b)
+                prohibido = 'S'
+            if distancia(xb,yb,c,d) < lineaDireta:
+                lineaDireta = distancia(xb,yb,a,b)
+                prohibido = 'S'
 
-            if pend == pend2:
-                if distancia(colf,filf,a,b) < distancia(colb,filf,a,b):
-                    #va hacia adelante
-                    if distancia(colf,filf,a,b) < distancia(colf,filf,c,d):
-                        #chocar por adelante
-                        resx = a
-                        resy = b
+            if lineaDireta < DIS_PARALELA and direccion == prohibido: direccion = DIR_PARA
+
+        else:
+            resx = (ord2-ord)/(pend-pend2)
+            resy = pend*resx + ord
+
+            #caso donde la colision esta en medio del carro que pregunta (es indiferetne para el)
+
+            if (resx < xf and resx < xb) or (resx > xf and resx > xb):
+
+                if distancia(xf,yf,resx,resy) < distancia(xb,yb,resx,resy):
+                    #mas cercano de la colision el sonser delantelro
+                    prohibido = DIR_F
+                    disTrayectoria = distancia(xf,yf,resx,resy)
+
+                    if (resx < a and resx < c) or (resx > a and resx > c):
+                        #no choca contra el medio de el carro contrario
+                        if distancia(a,b,resx,resy) < distancia(c,d,resx,resy):
+                            #frente frente
+                            lineaDireta = distancia(a,b,xf,yf)
+                            menor = min(lineaDireta,disTrayectoria)
+                            if menor <= DIS_DETEC:
+                                if carros[act].ultDir == DIR_F and direccion == prohibido:
+                                    logging.warning(f'{time.time()} - Se detubo porque el chocaba carro {act} que iba moviendose hacia {carros[act].ultDir}')
+                                    direccion = DIR_PARA
+                        else:
+                            #frente atras
+                            lineaDireta = distancia(c,d,xf,yf)
+                            menor = min(lineaDireta,disTrayectoria)
+                            if menor <= DIS_DETEC:
+                                if carros[act].ultDir == DIR_B and direccion == prohibido:
+                                    logging.warning(f'{time.time()} - Se detubo porque el chocaba carro {act} que iba moviendose hacia {carros[act].ultDir}')
+                                    direccion = DIR_PARA
                     else:
-                        resx = c
-                        resy = d
+                        if disTrayectoria < DIS_DETEC and direccion == prohibido: 
+                            logging.warning(f'{time.time()} - Se detubo porque el chocaba contra el medio de otro carro')
+                            direccion = DIR_PARA
+
                 else:
-                    if distancia(colb,filb,a,b) < distancia(colb,filb,c,d):
-                        #chocar por adelante
-                        resx = a
-                        resy = b
+                    #mas cercano a chocar el sensor trasero 
+                    prohibido = DIR_B
+                    disTrayectoria = distancia(xb,yb,resx,resy)
+
+                    if (resx < a and resx < c) or (resx > a and resx > c):
+                        if distancia(a,b,resx,resy) < distancia(c,d,resx,resy):
+                            #atras frente
+                            lineaDireta = distancia(a,b,xb,yb)
+                            menor = min(lineaDireta,disTrayectoria)
+                            if menor <= DIS_DETEC:
+                                if carros[act].ultDir == DIR_F and direccion == prohibido:
+                                    logging.warning(f'{time.time()} - Se detubo porque el chocaba carro {act} que iba moviendose hacia {carros[act].ultDir}')
+                                    direccion = DIR_PARA
+                        else:
+                            #atras atras
+                            lineaDireta = distancia(c,d,xb,yb)
+                            menor = min(lineaDireta,disTrayectoria)
+                            if menor <= DIS_DETEC:
+                                if carros[act].ultDir == DIR_B and direccion == prohibido:
+                                    logging.warning(f'{time.time()} - Se detubo porque el chocaba carro {act} que iba moviendose hacia {carros[act].ultDir}')
+                                    direccion = DIR_PARA
                     else:
-                        resx = c
-                        resy = d
-            else:
-                resx = (ord2-ord)/(pend-pend2)
-                resy = pend*resx + ord
+                        if disTrayectoria < DIS_DETEC and direccion == prohibido: 
+                            logging.warning(f'{time.time()} - Se detubo porque el chocaba contra el medio de otro carro')
+                            direccion = DIR_PARA
 
-            #checar caso el punto se encuentra dentro de el front y back
-            a = max(filf,filb)
-            b = max(colf,colb)
-            c = min(filf,filb) 
-            d = min(colf,colb)
-            #if (d <= resx and resx <= b) and (c <= resy and resy <= a) 
-            #comentado para probar
-
-            a = distancia(resx,resy,colf,filf)
-            b = distancia(resx,resy,colb,filb)
-            #if a <= DIS_COLISION or b < DIS_COLISION:
-            #comentdo para probar
-
-        #Terminar de hacer los casos, yas sea directamente entre puntos o contra la evaluacion de las rectas
 
     if direccion == DIR_PARA: return direccion
-    
+   
     #compara contra los muros
 
     # Si el coche va hacia adelante, calcula su punto virtual frontal
