@@ -17,9 +17,9 @@
 #define MSK_4 (1 << In4)
 
 
-const char* WIFI_SSID = "EcoCharlyBravo";
-const char* DIR_IP = "10.70.1.19";
-const char* WIFI_PASSWORD = "6322167445Eco87";
+const char* WIFI_SSID = "TP-Link_3D01";
+const char* DIR_IP = "192.168.0.100";
+const char* WIFI_PASSWORD = "01138580";
 
 /*
 const char* WIFI_SSID = "OSAIH6666";
@@ -27,17 +27,14 @@ const char* DIR_IP = "192.168.137.1";
 const char* WIFI_PASSWORD = "cuartoninos2";
 */
 
-WiFiClient wf, clientePosicion;
-WiFiServer wifiServer(8888);
-HTTPClient http;    //Declare object of class HTTPClient
+WiFiClient wf;
 
 //color de carro
 String color = "Verde";
 int vh,vl,vn;
-int a,b,c,d,v1,v2;
+int a,b,c,d,v1,v2,n1,n2,n3,l1,l2,l3;
 char pas;
 
-// Diagonales por aumento de velocidad
 
 void norte() {
   int msk = MSK_2 | MSK_4;
@@ -45,10 +42,6 @@ void norte() {
 
   msk = MSK_1 | MSK_3;
   GPOS = msk;
-
-  if (v1 != vn) analogWrite(EnA, vn);
-  if (v2 != vn) analogWrite(EnB, vn);
-  a = 1; b = 0; c = 1; d = 0; v1 = vn; v2 = vn;
 }
 void sur() {
   int msk = MSK_1 | MSK_3;
@@ -56,10 +49,6 @@ void sur() {
 
   msk = MSK_2 | MSK_4;
   GPOS = msk; 
-
-  if (v1 != vn) analogWrite(EnA, vn);
-  if (v2 != vn) analogWrite(EnB, vn);
-  a = 0; b = 1; c = 0; d = 1; v1 = vn; v2 = vn;
 }
 void oeste() {
   int msk = MSK_2 | MSK_3;
@@ -67,10 +56,6 @@ void oeste() {
 
   msk = MSK_1 | MSK_4;
   GPOS = msk;
-
-  if (v1 != vn) analogWrite(EnA, vn);
-  if (v2 != vn) analogWrite(EnB, vn);
-  a = 1; b = 0; c = 0; d = 1; v1 = vn; v2 = vn;
 }
 void este() {
   int msk = MSK_1 | MSK_4;
@@ -78,18 +63,10 @@ void este() {
 
   msk = MSK_2 | MSK_3;
   GPOS = msk;
-  if (v1 != vn) analogWrite(EnA, vn);
-  if (v2 != vn) analogWrite(EnB, vn);
-  a = 0; b = 1; c = 1; d = 0; v1 = vn; v2 = vn;
 }
 void para() {
   int msk = MSK_1 | MSK_2 | MSK_3 | MSK_4;
   GPOC = msk;
-
-  if (v1 != vn) analogWrite(EnA, vn);
-  if (v2 != vn) analogWrite(EnB, vn);
-  a = 0; b = 0; c = 0; d = 0; v1 = vn; v2 = vn;
-
 }
 
 void noreste() { 
@@ -140,7 +117,17 @@ bool connectWifi()
 }
 
 void aplicaDireccion(char c){
-    if (pas != c) {
+    if (c == 'U') {
+      analogWrite(EnA, vn);
+      analogWrite(EnB, vn);
+      Serial.println("cambie a velocidad normal");
+    } 
+    else if (c == 'D') {
+      analogWrite(EnA, vl);
+      analogWrite(EnB, vl);
+      Serial.println("cambie a velocidad baja");
+    }
+    else if (pas != c) {
       if (c == 'N') norte();
       else if (c == 'S') sur();
       else if (c == 'E') este();
@@ -156,34 +143,47 @@ void aplicaDireccion(char c){
 
 char obtenDeWeb() {
 
+
   String link = "/avanzaMotores/" + color;
+  String payload;
 
-////  if (!wf.connected()){
-//    http.end();
-    wf.connect(DIR_IP, 8080);    
-    wf.disableKeepAlive();
-    http.setTimeout(25000);
+  if (wf.connect(DIR_IP, 8080)){    
+    HTTPClient http;
+    http.setTimeout(16000);
     http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
-//  }
 
-  int code = http.GET();
-  if (code != 200) Serial.println(code);
+    int code = http.GET();
 
-  String payload = http.getString();    //Get the response payload
-  
-  http.end();
+    switch (code){
+      case 200: payload = "V"; break;
+      case 201: payload = "N"; break;
+      case 202: payload = "S"; break;
+      case 203: payload = "E"; break;
+      case 204: payload = "O"; break;
+      case 205: payload = "W"; break;
+      case 206: payload = "X"; break;
+      case 207: payload = "Y"; break;
+      case 208: payload = "Z"; break;
+      case 209: payload = "D"; break;
+      case 210: payload = "U"; break;
+    }
 
-  return payload[0];
+    http.end();
+  }
+
+  if (payload.length() >= 1) return payload[0];
+  else return 'V';
 }
 
 void obtenVelocidades() {
 
   String link = "/velocidad/" + color;
 
-  HTTPClient http;    //Declare object of class HTTPClient
+  WiFiClient wf;
+  HTTPClient http;
   
   wf.connect(DIR_IP, 8080);    
-  http.setTimeout(15000);
+  http.setTimeout(5000);
   http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
 
   int code = http.GET();
@@ -202,12 +202,16 @@ void obtenVelocidades() {
     Serial.println(vh);
     Serial.println(vl);
     Serial.println(vn);
+    //empezamos tomando velocidades normales, lo dejo para sabe cuando se conecta y cuando da error
   }
   http.end();
+
 }
 
 void registraMotores() {
 
+  WiFiClient wf;
+  HTTPClient http;  
   String link = "/registraArduino/" + color + "/motores";
 
   wf.connect(DIR_IP, 8080);
@@ -224,20 +228,19 @@ void setup() {
   Serial.begin(115200);
   Serial.println();
 
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
+  WiFi.mode(WIFI_STA);
+
   Serial.print("Connecting to ");
   Serial.println(WIFI_SSID);
   if (connectWifi()) Serial.println("Estoy conectado");
   else Serial.println("Se intento y no se logro :'(");
   pas = 'V';
 
-	while (!WiFi.softAP(WIFI_SSID, WIFI_PASSWORD, 6, false, 15)) {
-		delay(500);
-	}
-  
-  //velocidades
-  vn = 150;
-  vh = 200;
-  vl = 100;
+  // Velocidades 
+  vn = 0  ;
+  vh = 0;
+  vl = 0;
   obtenVelocidades();
   
   // Configura pines de PWM
@@ -254,10 +257,10 @@ void setup() {
 
 }
 
-
 void loop() {
 
     char c;
     c = obtenDeWeb();
     aplicaDireccion(c);
+    //delay(1);
 }

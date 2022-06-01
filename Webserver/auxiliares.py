@@ -1,6 +1,12 @@
 import asyncio
+from cmath import sqrt
+from faulthandler import cancel_dump_traceback_later
 import math
+from operator import truediv
+from ssl import DER_cert_to_PEM_cert
 import time
+
+from pydantic import TupleError
 from coord import coordenadas
 import logging
 
@@ -13,6 +19,12 @@ DIR_FL = 'W'
 DIR_BL = 'X'
 DIR_BR = 'Y'
 DIR_FR = 'Z'
+VEL_LOW = 'D'
+VEL_HIGH = 'U'
+
+#Distancias para checarse entre carros y ver si chocan o no
+DIS_DETEC = 200
+DIS_COLISION = 180
 
 direcciones = [DIR_PARA, DIR_F, DIR_B, DIR_R, DIR_L, DIR_FL, DIR_BL, DIR_BR, DIR_FR]
 direccionesFrente = [DIR_F, DIR_FL, DIR_FR]
@@ -35,6 +47,9 @@ LIMBO = 4
 cy_calle = [12, 48, 72, 108]
 ang_calle = [math.pi, 0, math.pi, 0]
 cx_seccion = [0, 7, 14, 21, 29, 36, 43, 50, 57, 64, 71, 79, 86, 93, 100, 107, 114, 121, 129, 136, 143, 150, 157, 165, 171, 179, 186, 193, 200, 210]
+
+#variables de programacion
+numcarros = ['Azul','Verde','Rojo']
 
 # La clase carro lleva el control de:
     # Ultima lectura del sticker front
@@ -81,13 +96,26 @@ class Carro:
         self.ts_motores = 0
         self.ts_posicion = 0
         self.estatus_conexion = SIN_CONEXION
+
+        self.dirBrujula = 0
+
+        self.vpas = 0
         
         self.ultcarril = 3
+        self.ultcol = 50
         self.ajustesSeguidos = 0
 
+class Bloque:
+    def __init__(self, xl, xr, yu, yd):
+        self.xl = xl
+        self.xr = xr
+        self.yu = yu
+        self.yd = yd
+        self.estado = 0
+
 vel = {
-    'vh': '150',
-    'vl': '090',
+    'vh': '130',
+    'vl': '080',
     'vn': '120',
     'v1': '050',
     'v2': '100',
@@ -113,6 +141,29 @@ carros = {
     'Azul': Carro(),
     'Verde': Carro(),
     'Rojo': Carro()
+}
+
+bloques = {
+    '1': Bloque(100,400,785,635),
+    '2': Bloque(100,400,585,435),
+    '3': Bloque(460, 820,785,635),
+    '4': Bloque(460, 820,585,435),
+    '5': Bloque(1600, 1960,785,635),
+    '6': Bloque(1600,1960,585,435),
+    '7': Bloque(2020, 2320,785,635),
+    '8': Bloque(2020,2320,585,435),
+    '9': Bloque(1000, 1150, 1120, 940),
+    '10': Bloque(1000, 1150, 280, 100),
+    '11': Bloque(1240, 1390, 1120, 940),
+    '12': Bloque(1240, 1390, 280, 100),
+    '13': Bloque(1000, 1150,785,635),
+    '14': Bloque(1000, 1150,585,435),
+    '15': Bloque(1240, 1390,785,635),
+    '16': Bloque(1240, 1390,585,435),
+    '17': Bloque(880,940,785,435),
+    '18': Bloque(1480,1540,785,435),
+    '19': Bloque(1000,1390,880,820),
+    '20': Bloque(1000,1390,400,340)
 }
 
 
@@ -259,33 +310,151 @@ def calculaSeccion(carro, front, back):
 
     return posx, posy, angulo, prohibe
 
+def cambiaVel(carro):
+    if carros[carro].dire != DIR_F and carros[carro].dire != DIR_B: return
+
+    if carros[carro].dire == DIR_F:
+        x = carros[carro].xf
+        y = carros[carro].yf
+    else:
+        x = carros[carro].xa
+        y = carros[carro].ya
+
+    for i in range(1,21):
+        if bloques[str(i)].yd > y or bloques[str(i)].yu < y: continue
+        if bloques[str(i)].xl > x or bloques[str(i)].xr < x: continue
+
+        if carros[carro].vpas != bloques[str(i)].estado:
+            if bloques[str(i)].estado == 1: 
+                logging.warning(f'{time.time()} - Se inserta a la cola del carro {carro}, bloque de velocidad {bloques[str(i)].estado}')
+                carros[carro].queue.put_nowait(VEL_LOW)
+                carros[carro].vpas = 1
+            elif bloques[str(i)].estado == 0: 
+                logging.warning(f'{time.time()} - Se inserta a la cola del carro {carro}, bloque de velocidad {bloques[str(i)].estado}')
+                carros[carro].queue.put_nowait(VEL_HIGH)
+                carros[carro].vpas = 0
+
+
+def distancia(x1,y1,x2,y2):
+    a = abs(x1-x2)
+    a *= a
+    b=  abs(y1-y2)
+    b *= b
+    c = math.sqrt(a+b)
+    return c
+
+#def checamov(x1,y1,x2,y2,f,b):
 
 def overrideDireccion(carro, direccion):
+    if direccion not in direccionesFrente and direccion not in direccionesAtras: return direccion
 
-    calle = carros[carro].calle
-    seccion_f = carros[carro].seccion_f
-    seccion_a = carros[carro].seccion_a
+    filf = carros[carro].yf
+    colf = carros[carro].xf
+    filb = carros[carro].ya
+    colb = carros[carro].xa
+    pend = math.tan(carros[carro].angulo)
+    ord = carros[carro].yf - carros[carro].xf*pend 
+    
+    #compara contra los otros carros
+    for i in [0,1,2]:
+        act = numcarros[i]
+        if act == carro: continue
 
-    res = direccion
+        #calculo en base a las trayectorias
+        #checar y hacer pruebas con DIS_DETEC y DIS_COLISION
+        #checar caso donde angulo es casi 0 pegado a nada
+        a = carros[act].xf
+        b = carros[act].yf
+        c = carros[act].xa
+        d = carros[act].ya
+        if distancia(colf,filf,a,b) < DIS_DETEC or distancia(colf,filf,c,d) < DIS_DETEC or distancia(colb,filb,a,b) < DIS_DETEC or distancia(colb,filb,c,d) < DIS_DETEC:
+            pend2 = math.tan(carros[act].angulo)
+            ord2 = carros[act].yf - carros[act].xf*pend2
 
-    # Prohibiciones de la calle 0
-    if calle == 0 and seccion_f != -1:
-        # Prohibiciones hacia delante
-        if direccion == DIR_F:
-            if seccion_f <= 2 or seccion_a <= 4: res = DIR_PARA
+            if pend == pend2:
+                if distancia(colf,filf,a,b) < distancia(colb,filf,a,b):
+                    #va hacia adelante
+                    if distancia(colf,filf,a,b) < distancia(colf,filf,c,d):
+                        #chocar por adelante
+                        resx = a
+                        resy = b
+                    else:
+                        resx = c
+                        resy = d
+                else:
+                    if distancia(colb,filb,a,b) < distancia(colb,filb,c,d):
+                        #chocar por adelante
+                        resx = a
+                        resy = b
+                    else:
+                        resx = c
+                        resy = d
+            else:
+                resx = (ord2-ord)/(pend-pend2)
+                resy = pend*resx + ord
 
-        # Prohibiciones hacia atras
-        if direccion == DIR_B:
-            if seccion_f >= 24 or seccion_a >= 26: res = DIR_PARA
+            #checar caso el punto se encuentra dentro de el front y back
+            a = max(filf,filb)
+            b = max(colf,colb)
+            c = min(filf,filb) 
+            d = min(colf,colb)
+            #if (d <= resx and resx <= b) and (c <= resy and resy <= a) 
+            #comentado para probar
 
-        # Prohibiciones hacia el ESTE
-        if direccion == DIR_R:
-            permite = (seccion_f == 16) or (seccion_f <= 2)
-            if not permite: res = DIR_PARA
+            a = distancia(resx,resy,colf,filf)
+            b = distancia(resx,resy,colb,filb)
+            #if a <= DIS_COLISION or b < DIS_COLISION:
+            #comentdo para probar
 
-        # Prohibiciones hacia el OESTE
-        if direccion == DIR_L:
-            res = DIR_PARA
+        #Terminar de hacer los casos, yas sea directamente entre puntos o contra la evaluacion de las rectas
 
-    logging.warning(f'Se recibio direccion {direccion}, se envia {res}. Calle = {calle}, seccion_f = {seccion_f}, seccion_a = {seccion_a}')
-    return res
+    if direccion == DIR_PARA: return direccion
+    
+    #compara contra los muros
+    #falta checar el error de que un carro se encuentre encerrado al momento de pasarlo a 2 (cercarlo)
+    for i in range(1,20):
+        if bloques[str(i)].estado != 2: continue
+
+        #sensor front
+        if (bloques[str(i)].yd <= filf and filf <= bloques[str(i)].yu) and (bloques[str(i)].xl <= colf and colf <= bloques[str(i)].xr):
+            if direccion in direccionesFrente: 
+                    direccion = DIR_PARA
+                    logging.warning(f'Se recibio carro {carro}, frente del carro se encuentra dentro de la zona')
+
+        elif bloques[str(i)].yd <= filf and filf <= bloques[str(i)].yu: 
+            a = abs(colf-bloques[str(i)].xl) 
+            b = abs(colf-bloques[str(i)].xr)
+            if a <= 60 or b <= 60:
+                if direccion in direccionesFrente: 
+                    direccion = DIR_PARA
+                    logging.warning(f'Se recibio carro {carro}, se bloquea por zona ocupada adelante')
+        elif bloques[str(i)].xl <= colf and colf <= bloques[str(i)].xr: 
+            a = abs(filf-bloques[str(i)].yu) 
+            b = abs(filf-bloques[str(i)].yd)
+            if a <= 60 or b <= 60:
+                if direccion in direccionesFrente: 
+                    direccion = DIR_PARA
+                    logging.warning(f'Se recibio carro {carro}, se bloquea por zona ocupada adelante')
+        
+        #sensor back
+        if (bloques[str(i)].yd <= filb and filb <= bloques[str(i)].yu) and (bloques[str(i)].xl <= colb and colb <= bloques[str(i)].xr):
+                if direccion in direccionesAtras: 
+                    direccion = DIR_PARA
+                    logging.warning(f'Se recibio carro {carro}, se bloquea por zona ocupada atras')
+        if bloques[str(i)].yd <= filb and filb <= bloques[str(i)].yu: 
+            a = abs(colb-bloques[str(i)].xl) 
+            b = abs(colb-bloques[str(i)].xr)
+            if a <= 60 or b <= 60:
+                if direccion in direccionesAtras: 
+                    direccion = DIR_PARA
+                    logging.warning(f'Se recibio carro {carro}, parte trasera del autp se encuentra dentro de la zona')
+        elif bloques[str(i)].xl <= colb and colb <= bloques[str(i)].xr: 
+            a = abs(filb-bloques[str(i)].yu) 
+            b = abs(filb-bloques[str(i)].yd)
+            if a <= 60 or b <= 60:
+                if direccion in direccionesAtras: 
+                    direccion = DIR_PARA
+                    logging.warning(f'Se recibio carro {carro}, se bloquea por zona ocupada atras')
+
+
+    return direccion

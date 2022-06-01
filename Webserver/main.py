@@ -1,4 +1,5 @@
 from cgitb import reset
+from difflib import restore
 from distutils.filelist import translate_pattern
 from fastapi import FastAPI, Response, Request
 from fastapi.responses import HTMLResponse, FileResponse
@@ -13,7 +14,7 @@ import time
 from starlette.responses import RedirectResponse
 from coord import coordenadas
 import auxiliares
-from auxiliares import SIN_CONEXION, carros, cx_seccion, cy_calle, ang_calle
+from auxiliares import SIN_CONEXION, bloques, carros, cx_seccion, cy_calle, ang_calle
 import math
 import timeit
 import logging
@@ -149,23 +150,38 @@ async def _avanza(carro):
             carros[carro].ultDir = carros[carro].dirControl
             res = carros[carro].dirControl
         else:
-            res = await asyncio.wait_for(auxiliares.carros[carro].queue.get(), timeout = 20.0)
-            auxiliares.carros[carro].dire = res
-            auxiliares.carros[carro].queue.task_done()
+            if not carros[carro].queue.empty():
+                res = carros[carro].queue.get_nowait()
+            else:
+                res = await asyncio.wait_for(carros[carro].queue.get(), timeout=5)
+            carros[carro].dire = res
+            carros[carro].queue.task_done()
         
         dir_nueva = auxiliares.overrideDireccion(carro, res)
-        logging.warning(f'{time.time()} Res /avanzaMotores/{carro} :  res = {res}, dir_final = {dir_nueva}')
+        logging.warning(f'{time.time()} Res /avanzaMotores {carro} :  res = {res}, dir_final = {dir_nueva}')
         carros[carro].ultDir = dir_nueva
         if dir_nueva not in auxiliares.direccionesAjuste:
             carros[carro].ajustesSeguidos = 0
 
-        logging.warning(f'{time.time()} - Se envia respuesta para /avanzaMotores/{carro}: {dir_nueva}')
-        return Response(content = str(dir_nueva), media_type = "text/plain") 
+        respuesta=str(dir_nueva) 
 
     except asyncio.TimeoutError:
         auxiliares.carros[carro].dire = 'V'
         logging.warning(f'{time.time()} - Timeout para /avanzaMotores/{carro}: V')
-        return Response(content=str('V'), media_type="text/plain")
+        respuesta='V'
+
+    if respuesta == 'V': code = 200
+    elif respuesta == 'N': code = 201
+    elif respuesta == 'S': code = 202
+    elif respuesta == 'E': code = 203
+    elif respuesta == 'O': code = 204
+    elif respuesta == 'W': code = 205
+    elif respuesta == 'X': code = 206
+    elif respuesta == 'Y': code = 207
+    elif respuesta == 'Z': code = 208
+    elif respuesta == 'D': code = 209
+    elif respuesta == 'U': code = 210
+    return Response(status_code=code)
 
 
 @app.get("/control/{carro}", response_class=HTMLResponse)
@@ -221,10 +237,10 @@ async def direccion(response: Response, param_dir, carro, hash):
         carros[carro].dirControl = param_dir
         if not auxiliares.carros[carro].queue.full():
             auxiliares.carros[carro].queue.put_nowait(param_dir)
-            print(f'{time.time()} Enviando a cola de carro {carro} direccion {param_dir}')
+            logging.warning(f'{time.time()} Se agrego direccion {param_dir} a la cola del carro {carro}')
             return 'OK'
         else:
-            logging.warning(f'La cola de instrucciones del carro {carro} esta llena')
+            logging.warning(f'{time.time()} La cola de instrucciones del carro {carro} esta llena')
 
 @app.get("/img/{archivo}", response_class=FileResponse)
 async def _sirvearchivo(archivo):
@@ -240,71 +256,130 @@ async def _posicion(carro,front,back):
     auxiliares.heartbeatPosicion(carro)
     validaCarros()
 
-    dirControl = carros[carro].dirControl
-    calle = carros[carro].calle
-    carril = carros[carro].ultcarril
+    calle = 2
 
-    # Toma la decision dependiendo de si vas avanzando hacia adelante o atras
+    dirControl = carros[carro].dirControl
+    filf = coordenadas[front]['y']
+    colf = coordenadas[front]['x']
+    filb = coordenadas[back]['y']
+    colb = coordenadas[back]['x']
+
+    # Calcula la orientacion y la calle del carro
+    if colf == colb:
+        if filf > filb: ang = math.pi / 2
+        else: ang = math.pi * 3 / 2
+    else:
+        pend = (filf - filb) / (colf - colb)
+        ang = math.atan(pend)
+        
+        # Python regresa el angulo entre 90 y 270 grados, asi que hay que ver si el carro iba o venia sobre esa pendiente
+        if ang == 0 and colf < colb: ang += math.pi
+        elif ang < 0 and (filf - filb) > 0: ang += math.pi
+        elif ang > 0 and (filf - filb) < 0: ang += math.pi
+    
+    if ang < 0:
+        ang += 2.0 * math.pi
+
+    if ang >= math.pi * 7 / 4.0 or ang < math.pi / 4.0:
+        dirBrujula = 0
+    elif ang >= math.pi / 4.0 and ang < math.pi * 3.0 / 4.0:
+        dirBrujula = 90
+    elif ang >= math.pi * 3.0 / 4.0 and ang < math.pi * 5.0 / 4.0:
+        dirBrujula = 180
+    else:
+        dirBrujula = 270
+    logging.warning(f'{time.time()} - Se calculo angulo {ang}, brujula {dirBrujula}, xf {colf}, yf {filf}, xb {colb}, yb {filb}')
+
+    # Ubica en que calle esta y en base a eso decide los carriles
+    chf = coordenadas[front]['ch']
+    cvf = coordenadas[front]['cv']
+    chb = coordenadas[back]['ch']
+    cvb = coordenadas[back]['cv']
+
+    if cvf == 0 and cvb == 0:
+        carrilf = (int(chf)-1)%7
+        carrilb = (int(chb)-1)%7
+    elif chf == 0 and chb == 0:
+        carrilf = (int(cvf)-1)%7
+        carrilb = (int(cvb)-1)%7
+    else:
+        dfil = abs(filf - filb)
+        dcol = abs(colf - colb)
+        if dfil > dcol:
+            carrilf = (int(cvf)-1)%7
+            carrilb = (int(cvb)-1)%7
+        else: 
+            carrilf = (int(chf)-1)%7
+            carrilb = (int(chb)-1)%7             
+    
+
+    # Seccion de detonados por posicion
     dirNueva = ""
-    if dirControl in auxiliares.direccionesFrente:
-        # El coche va al frente, fijate en el lector del frente unicamente
-        try:
-            if carros[carro].frente != front:
-                carril = int(coordenadas[int(front)]['carril'])
-            else:
-                carril = int(coordenadas[int(back)]['carril'])
-        except:
-            carril = 3
-        logging.warning(f'{time.time()} Se leyo sticker {front} que se consdiera del carril {carril}')
-        if carril == 5:
-            # El carril 5 siempre cierra al centro
-            dirNueva = auxiliares.DIR_FL
-        elif carril == 4 and carros[carro].ultcarril != 5:
-            # El carril 4 gira a menos que venga del 5, lo cual significa que ya esta cerrando 
-            dirNueva = auxiliares.DIR_FL
-        elif carril == 3:
-            # El giro del 3 debe ser para compensar adecuaciones, si viene de la parte de abajo, de arriba o del centro
-            if carros[carro].ultcarril > 3:
-                dirNueva = auxiliares.DIR_FR
-            elif carros[carro].ultcarril < 3:
-                dirNueva = auxiliares.DIR_FL
-        elif carril == 2 and carros[carro].ultcarril != 1:
-            # El carril 2 gira a menos que venga del 1 en cuyo caso no hay que aumentar la compensacion
-            dirNueva = auxiliares.DIR_FR
-        elif carril == 1:
-            # El carril 1 gira siempre
-            dirNueva = auxiliares.DIR_FR            
-    elif dirControl in auxiliares.direccionesAtras and carros[carro].atras != back:
-        # El coche va hacia atras, los giros son inversos a cuando va al frente
-        try:
-            if carros[carro].atras != back:
-                carril = int(coordenadas[int(back)]['carril'])
-            else:
-                carril = int(coordenadas[int(front)]['carril'])
-        except:
-            carril = 3
-        logging.warning(f'{time.time()} Se leyo sticker {back} que se consdiera del carril {carril}')
-        if carril == 5:
-            dirNueva = auxiliares.DIR_BL
-        elif carril == 4 and carros[carro].ultcarril != 5:
-            dirNueva = auxiliares.DIR_BL
-        elif carril == 3:
-            if carros[carro].ultcarril > 3:
-                dirNueva = auxiliares.DIR_BR
-            elif carros[carro].ultcarril < 3:
-                dirNueva = auxiliares.DIR_BL
-        elif carril == 2 and carros[carro].ultcarril != 1:
-            dirNueva = auxiliares.DIR_BR
-        elif carril == 1:
-            dirNueva = auxiliares.DIR_BR            
+    limpiaCola = False
     
     # Actualiza los valores del carro
-    carros[carro].ultcarril = carril
-    carros[carro].frente = front
-    carros[carro].atras = back
+    carros[carro].yf = filf
+    carros[carro].xf = colf
+    carros[carro].ya = filb
+    carros[carro].xa = colb
+    carros[carro].calle = calle
+    carros[carro].dirBrujula = dirBrujula
+    carros[carro].angulo = ang
+
+    # Revisa si existe un cambio de velocidad en los carros 
+    logging.warning(f'{time.time()} - validando si existe algun cambio de direccion')
+    auxiliares.cambiaVel(carro)
+
+    # Revisa si debe detenerse por que haya un coche delante
+    if dirNueva == "" and dirControl in auxiliares.direccionesFrente:
+        tmp = auxiliares.overrideDireccion(carro, dirControl)
+        logging.warning(f'{time.time()} - Validando si llego a algun bloque prohibido {dirControl}, override regreso {tmp}')
+        if tmp == auxiliares.DIR_PARA:
+            dirNueva = tmp
+            limpiaCola = True
+
+    # Decide si es necesario ajustar para centrar en el carril
+    if dirNueva == "" and dirControl in auxiliares.direccionesFrente:
+
+        if carrilf == 0: 
+            # El carril 0 siempre cierra al centro
+            dirNueva = auxiliares.DIR_FL
+        elif carrilf == 6:
+            dirNueva = auxiliares.DIR_FR
+        elif carrilf == 1:
+            if (carrilb >= 1): dirNueva = auxiliares.DIR_FL
+        elif carrilf == 5: 
+            if (carrilb <= 5): dirNueva = auxiliares.DIR_FR
+        elif carrilf > 3 and carrilb < 3:
+            dirNueva = auxiliares.DIR_FR
+        elif carrilf < 3 and carrilb > 3:
+            dirNueva = auxiliares.DIR_FL
+
+    elif dirControl in auxiliares.direccionesAtras:
+        if carrilb == 0: 
+            # El carril 0 siempre cierra al centro
+            dirNueva = auxiliares.DIR_BL
+        elif carrilb == 6:
+            dirNueva = auxiliares.DIR_BR
+        elif carrilb == 1:
+            if (carrilf >= 1): dirNueva = auxiliares.DIR_BL
+        elif carrilb == 5: 
+            if (carrilf <= 5): dirNueva = auxiliares.DIR_BR
+        elif carrilb > 3 and carrilf < 3:
+            dirNueva = auxiliares.DIR_BR
+        elif carrilb < 3 and carrilf > 3:
+            dirNueva = auxiliares.DIR_BL            
+    
+    logging.warning(f'Se proceso posicion. Carril F {carrilf}, Carril B {carrilb}, Dir nueva {dirNueva}, Dir control {dirControl}')
 
     # Si hay una direccion nueva, insertala en la cola
     if dirNueva != "":
+        # Si habia que limpiar la cola, elimina todos los mensajes
+        if limpiaCola:
+            while not carros[carro].queue.empty():
+                carros[carro].queue.get_nowait()
+                carros[carro].queue.task_done()
+
         # saca los comandos que haya de mas en la cola
         while carros[carro].queue.full():
             eliminada = carros[carro].queue.get_nowait()
@@ -317,43 +392,22 @@ async def _posicion(carro,front,back):
             carros[carro].ajustesSeguidos += 1
         else:
             logging.warning(f'Eliminando ajuste por exceso de ajustes consecutivos')
-
-    # Determina la seccion en la que esta el auto
-    if calle <= 3:
-        # Es una calle horizontal
-        if (calle & 1) == 0:
-            # Es una calle con sentido OESTE
-            if dirControl not in auxiliares.direccionesAtras: 
-                seccion_f = coordenadas[int(front)]['seccion_a']
-                seccion_b = coordenadas[int(back)]['seccion_a']
-            else: 
-                seccion_f = coordenadas[int(front)]['seccion_b']
-                seccion_b = coordenadas[int(back)]['seccion_b']
-
-        else:
-            # Es calle con sentido ESTE
-            if dirControl not in auxiliares.direccionesAtras:
-                seccion_f = coordenadas[int(front)]['seccion_b']
-                seccion_b = coordenadas[int(back)]['seccion_b']
-            else:
-                seccion_f = coordenadas[int(front)]['seccion_a']
-                seccion_b = coordenadas[int(back)]['seccion_a']
-
-    logging.error(f'Se calculo nueva seccion para carro {carro}. Calle = {calle}, seccion f = {seccion_f}, seccion b = {seccion_b}')
-
-    carros[carro].seccion_f = seccion_f
-    carros[carro].seccion_a = seccion_b
+    else:
+        dirNueva = auxiliares.overrideDireccion(carro, dirControl)
+        if dirNueva != dirControl:
+            logging.warning(f'Insertando comando ficticio por prohibicion de pista {dirControl}, {dirNueva}')
+            carros[carro].queue.put_nowait(dirNueva)
 
     # Envia la nueva posicion para la interfaz grafica
     qobj = {
         'tipo': 'message',
         'carro': carro,
-        'front': seccion_f,
-        'back': seccion_b,
+        'front': front,
+        'back': back,
         'calle': carros[carro].calle,
-        'coordx': cx_seccion[int((seccion_f + seccion_b) / 2)],
-        'coordy': cy_calle[calle],
-        'rad': ang_calle[calle]
+        'coordy': int((filf + filb) / 2),
+        'coordx': int((colf + colb) / 2),
+        'rad': ang
     }
     qPosiciones.put_nowait(qobj)
 
@@ -362,10 +416,15 @@ async def _posicion(carro,front,back):
 
 @app.get("/velocidad/{carro}")
 async def velocidad(carro):
-    st = auxiliares.vel['vh'] + auxiliares.vel['vl'] + auxiliares.vel['vn']
+    st = auxiliares.vel['vh'] + auxiliares.vel['vl'] + auxiliares.vel['vn'] + '$'
     return Response(content=st, media_type="text/plain")
 
+@app.get("/updatezona/{bloque}/{estado}")
+async def _updatezona(bloque,estado):
+    #lo manda como int o string
+    bloques[bloque].estado = int(estado)
+    return "ok"
 
 if __name__ == '__main__':
-    logging.basicConfig(filename = "logfile.log", level = logging.DEBUG)
-    uvicorn.run(app, host='0.0.0.0', port='8080')
+    logging.basicConfig(filename = "logfile.log", level = logging.WARNING)
+    uvicorn.run(app, host='0.0.0.0', port='8080', timeout_keep_alive = 60)
