@@ -181,6 +181,10 @@ async def _avanza(carro):
     elif respuesta == 'Z': code = 208
     elif respuesta == 'D': code = 209
     elif respuesta == 'U': code = 210
+
+    
+    if respuesta == 'D' or respuesta == 'U': carros[carro].ultDir = 'V'
+    else: carros[carro].ultDir = respuesta
     return Response(status_code=code)
 
 
