@@ -1,4 +1,5 @@
 from cgitb import reset
+from difflib import restore
 from distutils.filelist import translate_pattern
 from fastapi import FastAPI, Response, Request
 from fastapi.responses import HTMLResponse, FileResponse
@@ -13,7 +14,7 @@ import time
 from starlette.responses import RedirectResponse
 from coord import coordenadas
 import auxiliares
-from auxiliares import SIN_CONEXION, Bloque, carros, cx_seccion, cy_calle, ang_calle
+from auxiliares import SIN_CONEXION, bloques, carros, cx_seccion, cy_calle, ang_calle
 import math
 import timeit
 import logging
@@ -168,7 +169,7 @@ async def _avanza(carro):
         auxiliares.carros[carro].dire = 'V'
         logging.warning(f'{time.time()} - Timeout para /avanzaMotores/{carro}: V')
         respuesta='V'
-        
+
     if respuesta == 'V': code = 200
     elif respuesta == 'N': code = 201
     elif respuesta == 'S': code = 202
@@ -178,6 +179,8 @@ async def _avanza(carro):
     elif respuesta == 'X': code = 206
     elif respuesta == 'Y': code = 207
     elif respuesta == 'Z': code = 208
+    elif respuesta == 'D': code = 209
+    elif respuesta == 'U': code = 210
     return Response(status_code=code)
 
 
@@ -310,39 +313,30 @@ async def _posicion(carro,front,back):
             carrilb = (int(chb)-1)%7             
     
 
-
     # Seccion de detonados por posicion
     dirNueva = ""
     limpiaCola = False
+    
+    # Actualiza los valores del carro
+    carros[carro].yf = filf
+    carros[carro].xf = colf
+    carros[carro].ya = filb
+    carros[carro].xa = colb
+    carros[carro].calle = calle
+    carros[carro].dirBrujula = dirBrujula
+    carros[carro].angulo = ang
 
-    # Revisa si es necesario detener el auto porque va a salir de la pista
-    if dirNueva == "" and dirControl in auxiliares.direccionesFrente:
-        if (dirBrujula == 0 and colf > 2100) or (dirBrujula == 90 and filf > 1000) or (dirBrujula == 180 and colf < 150) or (dirBrujula == 270 and filf < 150):
-            dirNueva = auxiliares.DIR_PARA
-            limpiaCola = True
-    elif dirNueva == "" and dirControl in auxiliares.direccionesAtras:            
-        if (dirBrujula == 180 and colb > 2100) or (dirBrujula == 270 and filb > 1000) or (dirBrujula == 0 and colb < 150) or (dirBrujula == 90 and filb < 150):
-            dirNueva = auxiliares.DIR_PARA
-            limpiaCola = True
-    if dirNueva != "":
-        logging.warning(f'{time.time()} - Ajustando comando por limite de pista.  Nueva dir {dirNueva}')
-
-    # Revisa si debe detenerse por semaforo
-    if dirNueva == "" and dirControl in auxiliares.direccionesFrente:
-        if (dirBrujula == 0 and colf > 2100) or (dirBrujula == 90 and filf > 1000) or (dirBrujula == 180 and colf < 150) or (dirBrujula == 270 and filf < 150):
-            dirNueva = auxiliares.DIR_PARA
-            limpiaCola = True
-    elif dirNueva == "" and dirControl in auxiliares.direccionesAtras:            
-        if (dirBrujula == 180 and colb > 2100) or (dirBrujula == 270 and filb > 1000) or (dirBrujula == 0 and colb < 150) or (dirBrujula == 90 and filb < 150):
-            dirNueva = auxiliares.DIR_PARA
-            limpiaCola = True
-    if dirNueva != "":
-        logging.warning(f'{time.time()} - Ajustando comando por limite de pista.  Nueva dir {dirNueva}')
-
-
+    # Revisa si existe un cambio de velocidad en los carros 
+    logging.warning(f'{time.time()} - validando si existe algun cambio de direccion')
+    auxiliares.cambiaVel(carro)
 
     # Revisa si debe detenerse por que haya un coche delante
-        
+    if dirNueva == "" and dirControl in auxiliares.direccionesFrente:
+        tmp = auxiliares.overrideDireccion(carro, dirControl)
+        logging.warning(f'{time.time()} - Validando si llego a algun bloque prohibido {dirControl}, override regreso {tmp}')
+        if tmp == auxiliares.DIR_PARA:
+            dirNueva = tmp
+            limpiaCola = True
 
     # Decide si es necesario ajustar para centrar en el carril
     if dirNueva == "" and dirControl in auxiliares.direccionesFrente:
@@ -377,14 +371,6 @@ async def _posicion(carro,front,back):
             dirNueva = auxiliares.DIR_BL            
     
     logging.warning(f'Se proceso posicion. Carril F {carrilf}, Carril B {carrilb}, Dir nueva {dirNueva}, Dir control {dirControl}')
-
-    # Actualiza los valores del carro
-    carros[carro].yf = filf
-    carros[carro].xf = colf
-    carros[carro].ya = filb
-    carros[carro].xa = colb
-    carros[carro].calle = calle
-    carros[carro].dirBrujula = dirBrujula
 
     # Si hay una direccion nueva, insertala en la cola
     if dirNueva != "":
@@ -436,7 +422,7 @@ async def velocidad(carro):
 @app.get("/updatezona/{bloque}/{estado}")
 async def _updatezona(bloque,estado):
     #lo manda como int o string
-    bloques[bloque].estado = estado
+    bloques[bloque].estado = int(estado)
     return "ok"
 
 if __name__ == '__main__':

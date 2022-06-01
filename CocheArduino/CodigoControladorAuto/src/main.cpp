@@ -32,7 +32,7 @@ WiFiClient wf;
 //color de carro
 String color = "Verde";
 int vh,vl,vn;
-int a,b,c,d,v1,v2;
+int a,b,c,d,v1,v2,n1,n2,n3,l1,l2,l3;
 char pas;
 
 
@@ -42,10 +42,6 @@ void norte() {
 
   msk = MSK_1 | MSK_3;
   GPOS = msk;
-
-  if (v1 != vn) analogWrite(EnA, vn);
-  if (v2 != vn) analogWrite(EnB, vn);
-  a = 1; b = 0; c = 1; d = 0; v1 = vn; v2 = vn;
 }
 void sur() {
   int msk = MSK_1 | MSK_3;
@@ -53,10 +49,6 @@ void sur() {
 
   msk = MSK_2 | MSK_4;
   GPOS = msk; 
-
-  if (v1 != vn) analogWrite(EnA, vn);
-  if (v2 != vn) analogWrite(EnB, vn);
-  a = 0; b = 1; c = 0; d = 1; v1 = vn; v2 = vn;
 }
 void oeste() {
   int msk = MSK_2 | MSK_3;
@@ -64,10 +56,6 @@ void oeste() {
 
   msk = MSK_1 | MSK_4;
   GPOS = msk;
-
-  if (v1 != vn) analogWrite(EnA, vn);
-  if (v2 != vn) analogWrite(EnB, vn);
-  a = 1; b = 0; c = 0; d = 1; v1 = vn; v2 = vn;
 }
 void este() {
   int msk = MSK_1 | MSK_4;
@@ -75,18 +63,10 @@ void este() {
 
   msk = MSK_2 | MSK_3;
   GPOS = msk;
-  if (v1 != vn) analogWrite(EnA, vn);
-  if (v2 != vn) analogWrite(EnB, vn);
-  a = 0; b = 1; c = 1; d = 0; v1 = vn; v2 = vn;
 }
 void para() {
   int msk = MSK_1 | MSK_2 | MSK_3 | MSK_4;
   GPOC = msk;
-
-  if (v1 != vn) analogWrite(EnA, vn);
-  if (v2 != vn) analogWrite(EnB, vn);
-  a = 0; b = 0; c = 0; d = 0; v1 = vn; v2 = vn;
-
 }
 
 void noreste() { 
@@ -137,7 +117,17 @@ bool connectWifi()
 }
 
 void aplicaDireccion(char c){
-    if (pas != c) {
+    if (c == 'U') {
+      analogWrite(EnA, vn);
+      analogWrite(EnB, vn);
+      Serial.println("cambie a velocidad normal");
+    } 
+    else if (c == 'D') {
+      analogWrite(EnA, vl);
+      analogWrite(EnB, vl);
+      Serial.println("cambie a velocidad baja");
+    }
+    else if (pas != c) {
       if (c == 'N') norte();
       else if (c == 'S') sur();
       else if (c == 'E') este();
@@ -174,17 +164,13 @@ char obtenDeWeb() {
       case 206: payload = "X"; break;
       case 207: payload = "Y"; break;
       case 208: payload = "Z"; break;
+      case 209: payload = "D"; break;
+      case 210: payload = "U"; break;
     }
 
-    //if (code != 200) Serial.println(code);
-
-    //if (code > 0) payload = http.getString();    //Get the response payload
-    //else payload = "V";
-  
     http.end();
   }
 
-  Serial.println(link + ": " + payload);
   if (payload.length() >= 1) return payload[0];
   else return 'V';
 }
@@ -192,21 +178,6 @@ char obtenDeWeb() {
 void obtenVelocidades() {
 
   String link = "/velocidad/" + color;
-
-/*  if (wf.connect(DIR_IP, 8080)){
-      String getstr = "GET " + link + " HTTP/1.1";
-      Serial.println(getstr);
-      wf.println(getstr);
-      wf.println("Host: 192.168.137.1:8080");
-      wf.println("User-Agent: ESP8266");
-      wf.println("Content-Length: 0");
-      wf.println();
-      
-      Serial.println("Reading");
-      String velocidades = wf.readStringUntil('$');
-      Serial.println(velocidades);
-  }
-*/
 
   WiFiClient wf;
   HTTPClient http;
@@ -231,6 +202,7 @@ void obtenVelocidades() {
     Serial.println(vh);
     Serial.println(vl);
     Serial.println(vn);
+    //empezamos tomando velocidades normales, lo dejo para sabe cuando se conecta y cuando da error
   }
   http.end();
 
@@ -264,11 +236,11 @@ void setup() {
   if (connectWifi()) Serial.println("Estoy conectado");
   else Serial.println("Se intento y no se logro :'(");
   pas = 'V';
-  
-  //velocidades
-  vn = 150;
-  vh = 200;
-  vl = 100;
+
+  // Velocidades 
+  vn = 0  ;
+  vh = 0;
+  vl = 0;
   obtenVelocidades();
   
   // Configura pines de PWM

@@ -29,10 +29,7 @@ const char* WIFI_SSID = "OSAIH6666";
 const char* DIR_IP = "192.168.137.1";  
 const char* WIFI_PASSWORD = "cuartoninos2";
 */
-
   WiFiClient wf;
-  HTTPClient http;
-
 
 //lector de rfid
 unsigned int ultb, penb, ultf, penf, trash;
@@ -59,7 +56,7 @@ bool ReadBack(int blockNum, byte *readBlockData)
   }
   else
   {
-    //Serial.println("Block was read successfully");  
+    //Serial.println("Block back was read successfully");  
     return true;
   }
   
@@ -77,7 +74,7 @@ bool ReadFront(int blockNum, byte *readBlockData)
   }
   else
   {
-    //Serial.println("Block was read successfully");  
+    //Serial.println("Block front was read successfully");  
     return true;
   }
   
@@ -88,24 +85,15 @@ void postEnWeb() {
   String link = "/posicion/" + color + '/' + ultf + '/' + ultb ;
   Serial.println(link);
 
-  if (primeraVez){
-    Serial.println("Conectando cliente WiFi por primera vez");
-    wf.connect(DIR_IP, 8080);
-    primeraVez = false;
-  }
- // if (!wf.connected()){
- //   http.end();
- //   wf.connect(DIR_IP, 8080);
-//    wf.disableKeepAlive();    
-//    http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
-  //}
 
-  Serial.println("Haciendo peticon get");
-  http.begin(wf, DIR_IP, 8080, link);
-  int code = http.GET();
-  Serial.println("Fin del get");
-  if (code != 200) Serial.println(code);
-  http.end();
+  if (wf.connect(DIR_IP, 8080)){    
+    HTTPClient http;
+    http.begin(wf, DIR_IP, 8080, link);     //Specify request destination
+
+    int code = http.GET();
+    if (code != 200) Serial.println(code);
+    http.end();
+  }
 
 }
 
@@ -156,11 +144,17 @@ bool connectWifi()
 
 void setup() {
 	Serial.begin(115200); //Iniciamos la comunicación  serial
+
 	SPI.begin();        //Iniciamos el Bus SPI
+  SPI.setFrequency(4000000);
+
 	Front.PCD_Init(); // Iniciamos  el MFRC522
   Back.PCD_Init();
+  Front.PCD_SetAntennaGain(0x04 << 4);
+  Back.PCD_SetAntennaGain(0x04 << 4);
 
   Serial.print("\n");
+
   Serial.print("Connecting to ");
   Serial.println(WIFI_SSID);
 
@@ -173,26 +167,26 @@ void setup() {
 void loop() {
   llama = false;
 
+	byte bufferATQA[2];
+	byte bufferSize = sizeof(bufferATQA);
+  MFRC522::StatusCode result;
+
   //BACK
-  if ( Back.PICC_IsNewCardPresent()) {  
-  	//Seleccionamos una tarjeta
+  result = Back.PICC_WakeupA(bufferATQA, &bufferSize);
+  if (result == MFRC522::STATUS_OK || result == MFRC522::STATUS_COLLISION){
+  //if ( Back.PICC_IsNewCardPresent()) {  
+  	  //Seleccionamos una tarjeta
       if ( Back.PICC_ReadCardSerial()) {   
 
         if (ReadBack(blockNum, readBlockData)) {
           trash = *((unsigned int*) readBlockData);     
           if (trash != ultb) {
-            int dif = ultb - penb;
-            if (dif < 0) dif *= -1;
-
-            if (dif != 1 || trash != penb){
-              penb = ultb;
-              ultb = trash;
-              llama = true;
-            }
+            ultb = trash;
+            llama = true;
           } 
         }
                      
-      }      
+      }
 	}
 
 	// Revisamos si hay nuevas tarjetas  presentes
