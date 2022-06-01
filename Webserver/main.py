@@ -60,7 +60,6 @@ def validaCarros():
 # ------------  FIN AUXILIARES
 
 
-
 @app.get('/stream')
 async def message_stream(request: Request):
     async def event_generator():
@@ -145,30 +144,36 @@ async def _avanza(carro):
     validaCarros()
 
     try:
+        # Si la cola esta vacia, el control tiene un comando apretado y lo ultimo que se envio al coche es distinto de ese comando, enviale el comando al coche
         if carros[carro].queue.empty() and carros[carro].dirControl != auxiliares.DIR_PARA and carros[carro].dirControl != carros[carro].ultDir:
             logging.warning(f'{time.time()} - Mandando comando ficticio por cola vacia y control apretado {carros[carro].dirControl}')
             carros[carro].ultDir = carros[carro].dirControl
             res = carros[carro].dirControl
         else:
+            # Si la cola tiene datos, entonces envia el primer dato de forma inmediata sin detener
             if not carros[carro].queue.empty():
                 res = carros[carro].queue.get_nowait()
+                carros[carro].queue.task_done()
+
+            # Si no hay comandos en la cola, espera a que llegue el siguiente
             else:
                 res = await asyncio.wait_for(carros[carro].queue.get(), timeout=5)
-            carros[carro].dire = res
-            carros[carro].queue.task_done()
+                carros[carro].queue.task_done()
         
+        # Antes de enviar el comando al carro, valida si hay alguna prohibicion que sobreescriba dicho comando
         dir_nueva = auxiliares.overrideDireccion(carro, res)
-        logging.warning(f'{time.time()} Res /avanzaMotores {carro} :  res = {res}, dir_final = {dir_nueva}')
+        
+        # Actualiza la ultima direccion que se envia al carro y si no es ajuste el numero de ajustes seguidos
         carros[carro].ultDir = dir_nueva
         if dir_nueva not in auxiliares.direccionesAjuste:
             carros[carro].ajustesSeguidos = 0
 
+        logging.warning(f'{time.time()} Respuesta a /avanzaMotores/{carro} :  res = {res}, dir_final = {dir_nueva}')
         respuesta=str(dir_nueva) 
 
     except asyncio.TimeoutError:
-        auxiliares.carros[carro].dire = 'V'
-        logging.warning(f'{time.time()} - Timeout para /avanzaMotores/{carro}: V')
-        respuesta='V'
+        logging.warning(f'{time.time()} - Timeout para /avanzaMotores/{carro}. Se enviara ' + auxiliares.DIR_PARA )
+        respuesta=auxiliares.DIR_PARA
 
     if respuesta == 'V': code = 200
     elif respuesta == 'N': code = 201
@@ -181,10 +186,10 @@ async def _avanza(carro):
     elif respuesta == 'Z': code = 208
     elif respuesta == 'D': code = 209
     elif respuesta == 'U': code = 210
-
-    
+      
     if respuesta == 'D' or respuesta == 'U': carros[carro].ultDir = 'V'
     else: carros[carro].ultDir = respuesta
+
     return Response(status_code=code)
 
 
@@ -199,15 +204,9 @@ async def _carrito(carro):
         'status': 'true',
         'conexion': carros[carro].estatus_conexion
     }
-    qPosiciones.put_nowait(qobj)
-    while not carros[carro].queue.empty(): 
-        carros[carro].queue.get_nowait()
-        carros[carro].queue.task_done()
 
-    carros[carro].seccion_f = -1
-    carros[carro].seccion_a = -1
-    carros[carro].sentido = auxiliares.LIMBO
-    auxiliares.eliminaProhibidos(carro)
+    qPosiciones.put_nowait(qobj)
+    auxiliares.queuePush(carro, auxiliares.DIR_PARA, True)
 
     async with aiofiles.open("./archivosHTML/control.html", mode="r") as f:
         html = await f.read()
@@ -239,12 +238,10 @@ async def direccion(response: Response, param_dir, carro, hash):
         return "Error(no eres quien lo controla)"
     else:
         carros[carro].dirControl = param_dir
-        if not auxiliares.carros[carro].queue.full():
-            auxiliares.carros[carro].queue.put_nowait(param_dir)
-            logging.warning(f'{time.time()} Se agrego direccion {param_dir} a la cola del carro {carro}')
-            return 'OK'
-        else:
-            logging.warning(f'{time.time()} La cola de instrucciones del carro {carro} esta llena')
+        auxiliares.queuePush(carro, param_dir, False)
+        logging.warning(f'{time.time()} Se agrego direccion {param_dir} a la cola del carro {carro}')
+        return 'OK'
+
 
 @app.get("/img/{archivo}", response_class=FileResponse)
 async def _sirvearchivo(archivo):
@@ -326,21 +323,15 @@ async def _posicion(carro,front,back):
     carros[carro].xf = colf
     carros[carro].ya = filb
     carros[carro].xa = colb
-    carros[carro].calle = calle
     carros[carro].dirBrujula = dirBrujula
     carros[carro].angulo = ang
 
-    # Revisa si existe un cambio de velocidad en los carros 
-    logging.warning(f'{time.time()} - validando si existe algun cambio de direccion')
-    auxiliares.cambiaVel(carro)
-
-    # Revisa si debe detenerse por que haya un coche delante
-    if dirNueva == "" and dirControl in auxiliares.direccionesFrente:
-        tmp = auxiliares.overrideDireccion(carro, dirControl)
-        logging.warning(f'{time.time()} - Validando si llego a algun bloque prohibido {dirControl}, override regreso {tmp}')
-        if tmp == auxiliares.DIR_PARA:
-            dirNueva = tmp
-            limpiaCola = True
+    # Revisa si la posicion detona algun comando debido a la posicion
+    tmp = auxiliares.overrideDireccion(carro, dirControl)
+    if tmp != dirControl:
+        logging.warning(f'{time.time()} - La posicion detono un comando de avance. Direccion del contro = {dirControl}, comando a insertar {tmp}')
+        dirNueva = tmp
+        limpiaCola = dirNueva == auxiliares.DIR_PARA
 
     # Decide si es necesario ajustar para centrar en el carril
     if dirNueva == "" and dirControl in auxiliares.direccionesFrente:
@@ -378,29 +369,7 @@ async def _posicion(carro,front,back):
 
     # Si hay una direccion nueva, insertala en la cola
     if dirNueva != "":
-        # Si habia que limpiar la cola, elimina todos los mensajes
-        if limpiaCola:
-            while not carros[carro].queue.empty():
-                carros[carro].queue.get_nowait()
-                carros[carro].queue.task_done()
-
-        # saca los comandos que haya de mas en la cola
-        while carros[carro].queue.full():
-            eliminada = carros[carro].queue.get_nowait()
-            logging.warning(f'Se elimino comando de la cola de {carro} por saturacion: {eliminada}')
-            carros[carro].queue.task_done()
-        
-        # Envia el nuevo comando a menos que exceda el numero de ajustes seguidos
-        if dirNueva in auxiliares.direccionesAjuste and carros[carro].ajustesSeguidos < auxiliares.MAX_AJUSTES:
-            carros[carro].queue.put_nowait(dirNueva)
-            carros[carro].ajustesSeguidos += 1
-        else:
-            logging.warning(f'Eliminando ajuste por exceso de ajustes consecutivos')
-    else:
-        dirNueva = auxiliares.overrideDireccion(carro, dirControl)
-        if dirNueva != dirControl:
-            logging.warning(f'Insertando comando ficticio por prohibicion de pista {dirControl}, {dirNueva}')
-            carros[carro].queue.put_nowait(dirNueva)
+        auxiliares.queuePush(carro, dirNueva, limpiaCola)
 
     # Envia la nueva posicion para la interfaz grafica
     qobj = {
@@ -423,11 +392,13 @@ async def velocidad(carro):
     st = auxiliares.vel['vh'] + auxiliares.vel['vl'] + auxiliares.vel['vn'] + '$'
     return Response(content=st, media_type="text/plain")
 
+
 @app.get("/updatezona/{bloque}/{estado}")
 async def _updatezona(bloque,estado):
     #lo manda como int o string
     bloques[bloque].estado = int(estado)
     return "ok"
+
 
 if __name__ == '__main__':
     logging.basicConfig(filename = "logfile.log", level = logging.WARNING)

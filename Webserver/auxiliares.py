@@ -46,6 +46,9 @@ SUR = 2
 OESTE = 3
 LIMBO = 4
 
+brujulaHorizontal = [ESTE, OESTE]
+brujulaVertical = [NORTE, SUR]
+
 cy_calle = [12, 48, 72, 108]
 ang_calle = [math.pi, 0, math.pi, 0]
 cx_seccion = [0, 7, 14, 21, 29, 36, 43, 50, 57, 64, 71, 79, 86, 93, 100, 107, 114, 121, 129, 136, 143, 150, 157, 165, 171, 179, 186, 193, 200, 210]
@@ -53,59 +56,28 @@ cx_seccion = [0, 7, 14, 21, 29, 36, 43, 50, 57, 64, 71, 79, 86, 93, 100, 107, 11
 #variables de programacion
 numcarros = ['Azul','Verde','Rojo']
 
-# La clase carro lleva el control de:
-    # Ultima lectura del sticker front
-    # Ultima lectura del sticker back
-    # 
-
 class Carro:
     def __init__(self):
-        self.frente = -1
-        self.atras = -1
-        self.dire = 'V'
-        self.dirControl = 'V'
-        self.ultDir = 'V'
-        self.llave = ''
-        self.ocupado = 'false'
-        self.xf = 0
-        self.yf = 0
-        self.xa = 0
-        self.ya = 0
-        self.x = 0
-        self.y = 0
-        self.angulo = 0
-        self.ts_posicion = 0
-        self.queue = asyncio.Queue(maxsize=4)
-
-        self.prohibidos = {
-            'N': False,
-            'S': False,
-            'E': False,
-            'O': False,
-            'W': False,
-            'X': False,
-            'Y': False,
-            'Z': False,
-            'V': False
-        }
-        
-        self.mov_frente = 0
-
-        self.seccion_f = -1
-        self.seccion_a = -1
-        self.sentido = LIMBO
-        self.calle = 0
-        self.ts_motores = 0
-        self.ts_posicion = 0
+        self.frente = -1            # Ultimo tag leido por el lector frontal
+        self.atras = -1             # Ultimo tag leido por el lector posterior
+        self.dirControl = 'V'       # Direccion apretada actualmente en el control
+        self.ultDir = 'V'           # Ultima direccion que se ha enviado al carro
+        self.llave = ''             # Hash de control
+        self.ocupado = 'false'      # Indicador de si el auto esta ocupado o no
+        self.xf = 0                 # Coordenada X del lector frontal obtenida del ultimo tag leido
+        self.yf = 0                 # Coordenada Y del lector frontal
+        self.xa = 0                 # Coordenada X del lector posterior
+        self.ya = 0                 # Coordenada Y del lector posterior
+        self.x = 0                  # Coordenada X estimada del centro del carro
+        self.y = 0                  # Coordenada Y estimada del centro del carro
+        self.angulo = 0             # Angulo en radianes del auto
+        self.queue = asyncio.Queue(maxsize=8) # Cola de comandos del auto
         self.estatus_conexion = SIN_CONEXION
-
-        self.dirBrujula = 0
-
-        self.vpas = 0
-        
-        self.ultcarril = 3
-        self.ultcol = 50
-        self.ajustesSeguidos = 0
+        self.dirBrujula = 0         # Direccion gruesa de brújula del auto N, S, E, O
+        self.velocidad = 0          # Velocidad actual del auto
+        self.ultCarril = 3          # Ultimo carril de la calle por la que paso el auto
+        self.ajustesSeguidos = 0    # Numero de ajustes seguido
+        self.ultQueue = DIR_PARA    # El ultimo comando que se inserto en la cola
 
 class Bloque:
     def __init__(self, xl, xr, yu, yd):
@@ -119,11 +91,6 @@ vel = {
     'vh': '130',
     'vl': '080',
     'vn': '120',
-    'v1': '050',
-    'v2': '100',
-    'v3': '150',
-    'v4': '200',
-    'v5': '250' 
 }
 
 TIEMPO_MAX_OVERRIDE = 1.5
@@ -135,6 +102,9 @@ BAN_VERTICAL = 128
 BAN_SECCION = 1024
 BAN_ENTRADA_SUR = 2048
 BAN_ENTRADA_MEDIA = 4096
+
+offset_front = 85
+offset_back = 290
 
 y_calle = [12, 31, 49, 60, 71, 90, 110]
 secciones_prohibidas = [-1, 12, 13, 14, 17, 18, 19, 52, 53, 54, 57, 58, 59]
@@ -169,11 +139,6 @@ bloques = {
 }
 
 
-def eliminaProhibidos(carro):
-    for direccion in direcciones:
-        carros[carro].prohibidos[direccion] = False
-
-
 def validaEstadoCarro(carro):
     ahora = time.time()
     trans_motores = ahora - carros[carro].ts_motores
@@ -185,6 +150,37 @@ def validaEstadoCarro(carro):
 
     return res
 
+
+def queuePush(carro, comando, limpia):
+
+    # Si debe limpiar la cola elimina todos los comandos
+    if limpia:
+        carros[carro].ultQueue = ""
+        while not carros[carro].queue.empty():
+            carros[carro].queue.get_nowait()
+            carros[carro].queue.task_done()
+
+    # Si la cola esta llena, elimina un comando
+    while carros[carro].queue.full():
+        eliminada = carros[carro].queue.get_nowait()
+        carros[carro].queue.task_done()
+        logging.warning(f'Se elimino comando de la cola de {carro} por saturacion: {eliminada}')
+
+    # Si el comando es uno de ajuste, debe tratarse de forma especial
+    if comando in direccionesAjuste:
+        if carros[carro].ajustesSeguidos < MAX_AJUSTES:
+            carros[carro].queue.put_nowait(comando)
+            carros[carro].ajustesSeguidos += 1
+            carros[carro].ultQueue = comando
+        else:
+            logging.warning(f'Eliminando ajuste por exceso de ajustes consecutivos')
+    
+    # Si no es de ajuste, entonces hay que agregarlo unicamente si no es igual que el ultimo comando de la cola
+    elif comando != carros[carro].ultQueue:
+        carros[carro].queue.put_nowait(comando)
+        carros[carro].ultQueue = comando
+
+
 def heartbeatMotores(carro):
     ahora = time.time()
     carros[carro].ts_motores = ahora
@@ -194,123 +190,6 @@ def heartbeatPosicion(carro):
     ahora = time.time()
     carros[carro].ts_posicion = ahora
 
-
-def prohibeMovimientos(carro, previaf, actualf, previaa, actuala):
-    pf = previaf in secciones_prohibidas
-    af = actualf in secciones_prohibidas
-    pa = previaa in secciones_prohibidas
-    aa = actuala in secciones_prohibidas
-
-    res = False
-
-    print(f'previaf = {previaf}, pf = {pf}')
-    print(f'actualf = {actualf}, pf = {af}')
-    print(f'previaa = {previaa}, pf = {pa}')
-    print(f'actuala = {actuala}, pf = {aa}')
-    print(f'Sentido coche = {carros[carro].sentido}, direccion actual = {carros[carro].dire}')
-
-    if carros[carro].sentido == LIMBO:
-        eliminaProhibidos(carro)
-    elif af:
-        carros[carro].prohibidos[DIR_F] = True
-        carros[carro].prohibidos[DIR_FL] = True
-        carros[carro].prohibidos[DIR_FR] = True
-        if carros[carro].dire == DIR_F or carros[carro].dire == DIR_FL or carros[carro].dire == DIR_FR: res = True
-    elif pf and not af:
-        carros[carro].prohibidos[DIR_F] = False
-        carros[carro].prohibidos[DIR_FL] = False
-        carros[carro].prohibidos[DIR_FR] = False
-
-    if aa:
-        carros[carro].prohibidos[DIR_B] = True
-        carros[carro].prohibidos[DIR_BL] = True
-        carros[carro].prohibidos[DIR_BR] = True
-        if carros[carro].dire == DIR_B or carros[carro].dire == DIR_BL or carros[carro].dire == DIR_BR: res = True
-    elif pa and not aa:
-        carros[carro].prohibidos[DIR_B] = False
-        carros[carro].prohibidos[DIR_BL] = False
-        carros[carro].prohibidos[DIR_BR] = False
-    
-    return res
-
-
-
-def calculaSeccion(carro, front, back):
-    dir_carro = carros[carro].sentido
-    ban_front = coordenadas[front]['banderas']
-    ban_back = coordenadas[back]['banderas']
-    previa_f = carros[carro].seccion_f
-    previa_a = carros[carro].seccion_a
-
-    # Dirección LIMBO
-    if dir_carro == LIMBO:
-        # El carro solo sale del limbo si el frente pasa por alguna entrada
-        if (ban_front & BAN_ENTRADA_SUR) == BAN_ENTRADA_SUR:
-            carros[carro].seccion_f = 10
-            carros[carro].seccion_a = -1
-            carros[carro].calle = 0
-            carros[carro].sentido = OESTE
-
-        elif (ban_front & BAN_ENTRADA_MEDIA) == BAN_ENTRADA_MEDIA:
-            carros[carro].seccion_f = 40
-            carros[carro].seccion_a = -1
-            carros[carro].calle = 2
-            carros[carro].sentido = OESTE
-    
-    else:
-        # Checa a que seccion pasa
-        if front != str(0) and carros[carro].frente != front:
-            if (ban_front & BAN_HORIZONTAL) == BAN_HORIZONTAL:
-                a = coordenadas[front]['norte']
-                b = coordenadas[front]['sur']
-                if carros[carro].seccion_f == a: carros[carro].seccion_f = b
-                else: carros[carro].seccion_f = a
-            else:
-                a = coordenadas[front]['este']
-                b = coordenadas[front]['oeste']
-                if carros[carro].seccion_f == a: carros[carro].seccion_f = b
-                else: carros[carro].seccion_f = a
-
-        if back != str(0) and carros[carro].atras != back:
-            if (ban_back & BAN_HORIZONTAL) == BAN_HORIZONTAL:
-                a = coordenadas[back]['norte']
-                b = coordenadas[back]['sur']
-                if carros[carro].seccion_a == a: carros[carro].seccion_a = b
-                else: carros[carro].seccion_a = a
-            else:
-                a = coordenadas[back]['este']
-                b = coordenadas[back]['oeste']
-                if carros[carro].seccion_a == a: carros[carro].seccion_a = b
-                else: carros[carro].seccion_a = a
-
-    carros[carro].frente = front
-    carros[carro].atras = back
-
-    seccion_f = carros[carro].seccion_f
-    seccion_a = carros[carro].seccion_a
-
-    prohibe = prohibeMovimientos(carro, previa_f, seccion_f, previa_a, seccion_a)
-
-    if carros[carro].sentido == NORTE:
-        angulo = math.pi / 2
-    elif carros[carro].sentido == OESTE:
-        angulo = math.pi
-        if carros[carro].seccion_f == carros[carro].seccion_a:
-            posx = ((carros[carro].seccion_f - 1) % 10) * 20 + 16
-        else:
-            posx = ((carros[carro].seccion_f - 1) % 10) * 20 + 26
-        posy = y_calle[int((seccion_f - 1) / 10)]
-    elif carros[carro].sentido == SUR:
-        angulo = math.pi * 1.5
-    else:
-        angulo = 0
-        if carros[carro].seccion_f == carros[carro].seccion_a:
-            posx = ((carros[carro].seccion_f - 1) % 10) * 20 + 16
-        else:
-            posx = ((carros[carro].seccion_f - 1) % 10) * 20 + 6
-        posy = y_calle[int((seccion_f - 1) / 10)]
-
-    return posx, posy, angulo, prohibe
 
 def cambiaVel(carro):
     if carros[carro].dire != DIR_F and carros[carro].dire != DIR_B: return
@@ -345,15 +224,23 @@ def distancia(x1,y1,x2,y2):
     c = math.sqrt(a+b)
     return c
 
-#def checamov(x1,y1,x2,y2,f,b):
 
 def overrideDireccion(carro, direccion):
+    # Permite pasar todo lo que sean vueltas, stop y cambios de velocidad
     if direccion not in direccionesFrente and direccion not in direccionesAtras: return direccion
 
-    yf = carros[carro].xf
+    yf = carros[carro].yf
     xf = carros[carro].xf
     yb = carros[carro].ya
     xb = carros[carro].xa
+    
+    # Obten las coordenadas de ambos lectores del carro
+    dirOrig = direccion
+    filf = carros[carro].yf
+    colf = carros[carro].xf
+    filb = carros[carro].ya
+    colb = carros[carro].xa
+
     pend = math.tan(carros[carro].angulo)
     ord = carros[carro].yf - carros[carro].xf*pend 
     
@@ -447,7 +334,53 @@ def overrideDireccion(carro, direccion):
 
 
     if direccion == DIR_PARA: return direccion
+   
+    #compara contra los muros
 
-    #aqui va le codigo de deteccion de puntos con el putno virtual
+    # Si el coche va hacia adelante, calcula su punto virtual frontal
+    if direccion in direccionesFrente:
+        if carros[carro].dirBrujula == NORTE:
+            xPuntoVirtual = colf
+            yPuntoVirtual = max(filf + offset_front, filb + offset_back)
+        elif carros[carro].dirBrujula == ESTE:
+            xPuntoVirtual = max(colf + offset_front, colb + offset_back)
+            yPuntoVirtual = filf
+        elif carros[carro].dirBrujula == SUR:
+            xPuntoVirtual = colf
+            yPuntoVirtual = min(filf - offset_front, filb - offset_back)
+        else:   
+            xPuntoVirtual = min(colf - offset_front, colb - offset_back)
+            yPuntoVirtual = filf
+    # Si el coche va en reversa, calcula el punto virtual trasero
+    else:
+        if carros[carro].dirBrujula == NORTE:
+            xPuntoVirtual = colf
+            yPuntoVirtual = min(filf - offset_back, filb - offset_front)
+        elif carros[carro].dirBrujula == ESTE:
+            xPuntoVirtual = min(colf - offset_back, colb - offset_front)
+            yPuntoVirtual = filf
+        elif carros[carro].dirBrujula == SUR:
+            xPuntoVirtual = colf
+            yPuntoVirtual = max(filf + offset_back, filb + offset_front)
+        else:   
+            xPuntoVirtual = max(colf + offset_back, colb + offset_front)
+            yPuntoVirtual = filf
+
+    #falta checar el error de que un carro se encuentre encerrado al momento de pasarlo a 2 (cercarlo)
+    for i in range(1,21):
+
+        # Revisa si el punto virtual de interes esta dentro del bloque
+        sti = str(i)
+        if (bloques[sti].yd <= yPuntoVirtual <= bloques[sti].yu) and (bloques[sti].xl <= xPuntoVirtual <= bloques[sti].xr):
+            if bloques[sti].estado == 2:
+                direccion = DIR_PARA
+            elif bloques[sti].estado == 1 and carros[carro].velocidad == VEL_HIGH:
+                direccion = VEL_LOW
+            elif bloques[sti].estado == 0 and carros[carro].velocidad == VEL_LOW:
+                direccion = VEL_HIGH
+
+            logging.warning(f'{time.time()} - El punto virtual del carro {carro} esta dentro del bloque {sti}. Direccion recibida {dirOrig}, se devuelve {direccion}')
+
+            break
 
     return direccion
